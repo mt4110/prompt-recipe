@@ -1,0 +1,37 @@
+[package]
+name = "prompt-recipe"
+version = "0.1.0"
+edition = "2021"
+default-run = "prompt-recipe"
+
+[lib]
+name = "prompt_recipe"
+
+[features]
+default = ["desktop"]
+custom-protocol = ["tauri/custom-protocol"]
+desktop = ["dep:tauri", "dep:tauri-plugin-clipboard-manager", "dep:tauri-plugin-global-shortcut", "dep:tauri-build", "dep:tauri-plugin-dialog"]
+
+[[bin]]
+name = "prompt-recipe"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[[bin]]
+name = "recipe-preview"
+path = "src/bin/preview.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+quick-xml = "=0.42.0"
+tauri-plugin-dialog = { version = "=2.8.1", optional = true }
+tauri = { version = "2", optional = true , features = [] }
+tauri-plugin-clipboard-manager = { version = "2", optional = true }
+tauri-plugin-global-shortcut = { version = "2", optional = true }
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true , features = [] }

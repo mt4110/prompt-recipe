@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "version": "2026.10.04.1",
+  "checked_at": "2026-10-04",
+  "review_due": "2026-11-04",
+  "status": "公式資料照合済み・同条件での性能比較は未実施",
+  "sources": [
+    {
+      "id": "openai-models",
+      "title": "OpenAI：モデルと利用環境",
+      "url": "https://learn.chatgpt.com/docs/models"
+    },
+    {
+      "id": "openai-plans",
+      "title": "OpenAI：プラン",
+      "url": "https://learn.chatgpt.com/docs/pricing"
+    },
+    {
+      "id": "claude-models",
+      "title": "Anthropic：モデル選択",
+      "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model"
+    },
+    {
+      "id": "claude-plan",
+      "title": "Anthropic：Fableのプラン対応",
+      "url": "https://support.claude.com/en/articles/15424964-claude-fable-models-on-your-plan"
+    },
+    {
+      "id": "claude-xml",
+      "title": "Anthropic：プロンプトの構造化",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+    },
+    {
+      "id": "claude-code",
+      "title": "Claude Code：概要",
+      "url": "https://code.claude.com/docs/en/overview"
+    },
+    {
+      "id": "google-plans",
+      "title": "Google：UltraとGemini",
+      "url": "https://gemini.google/subscriptions/"
+    },
+    {
+      "id": "google-agent",
+      "title": "Google：Antigravity",
+      "url": "https://antigravity.google/"
+    },
+    {
+      "id": "google-models",
+      "title": "Google：APIモデル一覧",
+      "url": "https://ai.google.dev/gemini-api/docs/models"
+    },
+    {
+      "id": "copilot-models",
+      "title": "GitHub：対応モデル",
+      "url": "https://docs.github.com/en/copilot/reference/ai-models/supported-models"
+    },
+    {
+      "id": "copilot-plans",
+      "title": "GitHub：プラン",
+      "url": "https://docs.github.com/en/copilot/get-started/plans"
+    },
+    {
+      "id": "copilot-cli",
+      "title": "GitHub：CLI",
+      "url": "https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli"
+    },
+    {
+      "id": "claude-max",
+      "title": "Anthropic：Maxの利用枠",
+      "url": "https://support.claude.com/en/articles/11049741-what-is-the-max-plan"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "openai",
+      "name": "ChatGPT / Codex",
+      "plan": "個人最上位：Pro $500（米国表示）",
+      "models": "能力上位：GPT-6 Astra。継続作業の候補：GPT-6.1 Sol。",
+      "facts": "Sol / Luna はWork・Codexのモデル。通常のChatとは選択肢が異なります。",
+      "strength": "設計から実装・検証までをつなぐ作業の候補。反復作業はSol、難所はAstraを検討。",
+      "caution": "「万能」や仕様遵守の保証ではありません。利用できるモデル・権限・推論設定を実画面で確認。",
+      "chat": "ChatGPT（会話・添付）",
+      "agent": "Codex / Work（作業環境）",
+      "format": "markdown",
+      "sources": ["openai-models", "openai-plans"]
+    },
+    {
+      "id": "claude",
+      "name": "Claude / Claude Code",
+      "plan": "個人最上位の利用枠：Max 20x",
+      "models": "能力上位：Claude Fable 5.1。通常の複雑な作業：Opus 5.5。",
+      "facts": "公式は長時間のエージェント作業も用途に挙げています。XMLによる資料・指示の区分を推奨。",
+      "strength": "資料と根拠の対応、設計の矛盾、状態遷移・アルゴリズムの検討に試したい候補。",
+      "caution": "「RunAlwaysが苦手」は今回の個人経験として扱います。モデル・環境・停止条件を揃えた比較は未実施。",
+      "chat": "Claude（会話・添付）",
+      "agent": "Claude Code（作業環境）",
+      "format": "xml",
+      "sources": [
+        "claude-models",
+        "claude-plan",
+        "claude-xml",
+        "claude-code",
+        "claude-max"
+      ]
+    },
+    {
+      "id": "google",
+      "name": "Gemini / Antigravity",
+      "plan": "個人最上位の利用枠：Google AI Ultra 20x",
+      "models": "消費者向け案内：Gemini 3.1 Pro / Deep Think。API一覧には3.8 Flash等も掲載。",
+      "facts": "AntigravityはIDE・CLI・複数エージェント等の開発環境。API一覧のモデルと契約画面を混同しません。",
+      "strength": "資料を横断する調査・分析の候補。コードの実作業を任せる場合はAntigravityで検証。",
+      "caution": "Deep Thinkなどは地域・提供条件を確認。大きな入力枠は、全資料を正確に読む証拠にはなりません。",
+      "chat": "Gemini（会話・添付）",
+      "agent": "Antigravity（作業環境）",
+      "format": "markdown",
+      "sources": ["google-plans", "google-agent", "google-models"]
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot",
+      "plan": "個人最上位：Copilot Max",
+      "models": "複数社のモデルを選択。Astra・Sol・Fable等は対応表と実画面で確認。",
+      "facts": "IDEだけでなくCLIもあります。モデルの利用可否はプラン・クライアント・管理者設定に依存。",
+      "strength": "エディタやリポジトリの文脈を使う修正・テスト・レビューの候補。選んだモデルも記録。",
+      "caution": "Copilot自体を単独モデルとして順位付けしません。別モデルへ切り替わった比較は公平になりません。",
+      "chat": "Copilot Chat（会話）",
+      "agent": "Copilot Agent / CLI（作業環境）",
+      "format": "markdown",
+      "sources": ["copilot-models", "copilot-plans", "copilot-cli"]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "implementation",
+      "name": "実装・リファクタリング",
+      "recipe_ids": ["builtin-01", "builtin-02", "builtin-03"],
+      "guidance": "まず正本と変更範囲の対応を確認。小さく変更し、対象テストと差分を確認します。",
+      "instruction": "今回の目的は実装・リファクタリングの準備です。変更対象、維持する振る舞い、対象テスト、未確認事項を示してください。"
+    },
+    {
+      "id": "analysis",
+      "name": "資料・アーキテクチャ・アルゴリズム",
+      "recipe_ids": ["builtin-01", "builtin-06"],
+      "guidance": "主張と資料の参照先を対応させます。数理の前提と境界条件を明示し、設計と実装を分けます。",
+      "instruction": "今回の目的は資料・設計の分析です。参照箇所、前提、矛盾、境界条件を示し、提案と確認済み事実を区別してください。"
+    },
+    {
+      "id": "infrastructure",
+      "name": "インフラ・k8s",
+      "recipe_ids": ["builtin-01", "builtin-07"],
+      "guidance": "対象環境と権限を先に確認。読み取りから始め、変更は復旧方法と承認範囲を決めます。",
+      "instruction": "今回の目的はインフラの検討です。対象環境、権限、影響範囲、読み取りで得られる証拠、復旧方法を示してください。承認されていない本番変更は行わないでください。"
+    },
+    {
+      "id": "parallel",
+      "name": "RunAlways・並列設計",
+      "recipe_ids": ["builtin-01", "builtin-02", "builtin-05"],
+      "guidance": "独立した仕事だけを分担。担当ファイル、統合責任、予算、停止条件を決めます。会話だけの環境では分担計画まで。",
+      "instruction": "今回の目的は並列作業の設計です。独立した仕事、編集の所有者、統合と検証の担当、費用と停止条件を先に示してください。利用できないエージェントを起動したと装わないでください。"
+    }
+  ]
+}

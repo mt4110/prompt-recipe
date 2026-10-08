@@ -1,0 +1,19 @@
+{
+  "identifier": "desktop",
+  "description": "Local recipe commands for bundled main and palette windows",
+  "windows": [
+    "main",
+    "palette"
+  ],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-dispatch",
+    "allow-copy-prompt",
+    "allow-palette-action",
+    "allow-shortcut-status",
+    "allow-read-material",
+    "allow-open-repository",
+    "allow-save-export"
+  ]
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-copy-prompt"
+description = "Enables the copy_prompt command without any pre-configured scope."
+commands.allow = ["copy_prompt"]
+
+[[permission]]
+identifier = "deny-copy-prompt"
+description = "Denies the copy_prompt command without any pre-configured scope."
+commands.deny = ["copy_prompt"]

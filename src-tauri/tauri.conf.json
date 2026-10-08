@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Prompt Recipe",
+  "version": "0.1.0",
+  "identifier": "local.promptrecipe.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Prompt Recipe",
+        "width": 1100,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 560,
+        "create": false
+      },
+      {
+        "label": "palette",
+        "title": "Prompt Recipe — 小窓",
+        "url": "index.html?window=palette",
+        "width": 580,
+        "height": 640,
+        "visible": false,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "center": true,
+        "create": false
+      }
+    ],
+    "security": {
+      "capabilities": [
+        "desktop"
+      ],
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": [
+      "app"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "icon": [
+      "icons/recipe-v1/generated/32x32.png",
+      "icons/recipe-v1/generated/128x128.png",
+      "icons/recipe-v1/generated/128x128@2x.png",
+      "icons/recipe-v1/generated/icon.icns",
+      "icons/recipe-v1/generated/icon.ico"
+    ]
+  }
+}
