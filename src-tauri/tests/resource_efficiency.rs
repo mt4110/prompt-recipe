@@ -23,7 +23,10 @@ fn shared_pack_is_bounded_and_valid_without_revising_existing_recipes() {
         assert_eq!(recipe.version, 1);
         assert!(recipe.parent_revision_id.is_none());
         assert!(recipe.variables.is_empty());
-        assert!(recipe.constraints.is_empty(), "free-text advice is not a machine-enforced permission");
+        assert!(
+            recipe.constraints.is_empty(),
+            "free-text advice is not a machine-enforced permission"
+        );
         let lesson = recipe.lesson.as_ref().expect("rereadable lesson metadata");
         assert!(lesson.evidence.contains("未検証"));
     }
@@ -51,10 +54,12 @@ fn shared_recipes_compose_individually_without_missing_variables_or_false_enforc
     };
     for recipe in pack().recipes {
         let body = recipe.body.clone();
+        let lesson_why = recipe.lesson.as_ref().expect("lesson").why.clone();
         let result = compose(&[recipe], &project, &BTreeMap::new()).expect("composition");
         assert!(!result.blocked);
         assert!(result.variables.is_empty());
         assert!(result.body.contains(&body));
+        assert!(!result.body.contains(&lesson_why));
         assert!(result.diagnostics.iter().any(|d| d.kind == "unchecked"));
         assert!(result.diagnostics.iter().all(|d| d.kind == "unchecked"));
     }
@@ -63,8 +68,21 @@ fn shared_recipes_compose_individually_without_missing_variables_or_false_enforc
 #[test]
 fn global_excerpt_is_small_and_has_a_single_managed_boundary() {
     let excerpt = include_str!("../../examples/agents/resource-efficiency.md");
-    assert!(excerpt.len() < 8 * 1024, "Global excerpt must stay bounded in bytes, not claimed tokens");
-    assert_eq!(excerpt.matches("<!-- prompt-recipe:resource-efficiency:start -->").count(), 1);
-    assert_eq!(excerpt.matches("<!-- prompt-recipe:resource-efficiency:end -->").count(), 1);
+    assert!(
+        excerpt.len() < 8 * 1024,
+        "Global excerpt must stay bounded in bytes, not claimed tokens"
+    );
+    assert_eq!(
+        excerpt
+            .matches("<!-- prompt-recipe:resource-efficiency:start -->")
+            .count(),
+        1
+    );
+    assert_eq!(
+        excerpt
+            .matches("<!-- prompt-recipe:resource-efficiency:end -->")
+            .count(),
+        1
+    );
     assert!(!excerpt.contains("/Users/"));
 }
