@@ -36,7 +36,7 @@ export default defineConfig({
                   if (exceeded) return;
                   const child = execFile(
                     resolve("src-tauri/target/debug/recipe-preview"),
-                    [resolve(".local/preview.sqlite")],
+                    [resolve(process.env.PROMPT_RECIPE_PREVIEW_DB || ".local/preview.sqlite")],
                     { timeout: 15000, maxBuffer: 4 * 1024 * 1024 },
                     (error, stdout) => {
                       res.setHeader("Content-Type", "application/json");
