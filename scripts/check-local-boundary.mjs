@@ -14,6 +14,7 @@ export function validateBoundary(config, capability) {
       "allow-copy-prompt",
       "allow-palette-action",
       "allow-shortcut-status",
+      "allow-set-shortcut",
       "allow-read-material",
       "allow-open-repository",
       "allow-save-export",

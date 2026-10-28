@@ -154,7 +154,7 @@ export function Composer({
         if (
           e.key === "Enter" &&
           (e.metaKey || e.ctrlKey) &&
-          !e.nativeEvent.isComposing
+          !e.nativeEvent.isComposing && !e.repeat
         ) {
           e.preventDefault();
           void doCopy();

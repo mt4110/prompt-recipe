@@ -6,6 +6,7 @@ fn main() {
             "copy_prompt",
             "palette_action",
             "shortcut_status",
+            "set_shortcut",
             "read_material",
             "open_repository",
             "save_export",

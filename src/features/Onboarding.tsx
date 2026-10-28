@@ -1,3 +1,6 @@
+import { useShortcut } from "./ShortcutSettings";
+import { shortcutLabel } from "../shortcut";
+import { isMac } from "../platform";
 import { useState } from "react";
 import { message, request } from "../api";
 import type { Recipe, Snapshot } from "../types";
@@ -11,6 +14,7 @@ export function Onboarding({ snapshot, refresh, notice, finish }: {
   finish: () => void;
   compare: () => void;
 }) {
+  const {status: shortcut}=useShortcut();
   const sample = snapshot.recipes.find(r => r.builtin);
   const [name, setName] = useState("最初のプロンプト");
   const [body, setBody] = useState("次の文章を読み、要点を3つにまとめてください。\n\n{{text}}");
@@ -42,6 +46,7 @@ export function Onboarding({ snapshot, refresh, notice, finish }: {
   }
   return <main className="onboarding">
     <div className="section-title"><h1>書く → 埋める → コピー</h1><button onClick={() => void complete()}>あとで試す</button></div>
+    <p className="muted">小窓を開くキー: <kbd>{shortcutLabel(shortcut.binding,isMac())}</kbd>。通常画面の設定から変更できます。</p>
     <ol className="steps">{["書く", "埋める", "コピー"].map((s, i) => <li key={s} aria-current={step === i ? "step" : undefined}>{s}</li>)}</ol>
     {step === 0 && <form onSubmit={e => { e.preventDefault(); setDraft({ name, body }); setRecipe(null); setStep(1); }}>
       <p>ここでは保存せずに試せます。台帳への登録は、コピーを試した後に選びます。</p>

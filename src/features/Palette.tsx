@@ -1,3 +1,5 @@
+import { shortcutLabel } from "../shortcut";
+import { useShortcut } from "./ShortcutSettings";
 import { ui } from "../i18n";
 import { isMac } from "../platform";
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +19,7 @@ export function Palette({
   notice: (s: string) => void;
   close: () => void;
 }) {
+  const {status: shortcut}=useShortcut();
   const project =
     snapshot.projects.find((p) => p.id === snapshot.active_project) ||
     snapshot.projects[0];
@@ -113,6 +116,7 @@ export function Palette({
           Esc
         </button>
       </div>
+      <p className="muted">小窓を開くキー: <kbd>{shortcutLabel(shortcut.binding,isMac())}</kbd></p>
       <p className="muted">
         {snapshot.repositories[project.id] ? project.name : ui.noProject} · {ids.length}本選択中
       </p>

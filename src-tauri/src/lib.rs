@@ -12,3 +12,5 @@ pub mod repository;
 pub mod portable;
 
 pub mod hash;
+
+pub mod shortcuts;

@@ -15,12 +15,12 @@
     "test:discovery": "node scripts/run-tests.mjs scripts/discovery.test.ts",
     "test:copy-messages": "node scripts/run-tests.mjs scripts/copy-messages.test.ts",
     "check:boundary": "node scripts/check-local-boundary.mjs",
-    "test:frontend": "node scripts/run-tests.mjs scripts/selection.test.ts scripts/node-version.test.mjs",
+    "test:frontend": "node scripts/run-tests.mjs scripts/selection.test.ts scripts/shortcut.test.ts scripts/node-version.test.mjs",
     "preinstall": "node scripts/check-node.mjs",
     "predev": "node scripts/check-node.mjs",
     "prebuild": "node scripts/check-node.mjs",
     "precheck": "node scripts/check-node.mjs",
-    "test": "node scripts/run-tests.mjs scripts/discovery.test.ts scripts/copy-messages.test.ts scripts/selection.test.ts scripts/node-version.test.mjs"
+    "test": "node scripts/run-tests.mjs scripts/discovery.test.ts scripts/copy-messages.test.ts scripts/selection.test.ts scripts/shortcut.test.ts scripts/node-version.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
