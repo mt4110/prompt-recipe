@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { advisoryRuleLabel } from "../i18n";
 import { copySuccess, copyFailure } from "../copyMessages";
 import { LintPanel } from "./LintPanel";
 import { AdvisoryCheckError, copy, message, readMaterial, request } from "../api";
@@ -15,6 +16,7 @@ export function Composer({
   materialEnabled = true,
   focusToken = 0,
   standalone = false,
+  draft,
 }: {
   project: Project;
   ids: string[];
@@ -26,6 +28,7 @@ export function Composer({
   materialEnabled?: boolean;
   focusToken?: number;
   standalone?: boolean;
+  draft?: { name: string; body: string };
 }) {
   const [includeContext, setIncludeContext] = useState(() => localStorage.getItem(`context:${project.id}`) === "true");
   const [aiFormat, setAiFormat] = useState(false);
@@ -39,11 +42,11 @@ export function Composer({
   const lastFocus = useRef(0);
   const [error, setError] = useState("");
   const lastContext = useRef("");
-  const inputKey=JSON.stringify([project.id,project.version,ids,values,standalone,includeContext,aiFormat]);
+  const inputKey=JSON.stringify([project.id,project.version,ids,values,standalone,includeContext,aiFormat,draft]);
   const resolvedKey=useRef("");
   useEffect(() => {
     let active = true;
-    const context = JSON.stringify([project.id, project.version, ids, standalone, includeContext, aiFormat]);
+    const context = JSON.stringify([project.id, project.version, ids, standalone, includeContext, aiFormat, draft]);
     const inputOnly = lastContext.current === context;
     lastContext.current = context;
     if (!inputOnly) setResult(null);
@@ -57,7 +60,7 @@ export function Composer({
     // Selection is immediate; consecutive text edits share one trailing IPC request.
     const timer = setTimeout(
       () => {
-        request<Composition>("compose", {
+        request<Composition>(draft ? "compose_draft" : "compose", draft ? {draft, values} : {
           project_id: project.id,
           standalone,
           include_context: includeContext,
@@ -85,7 +88,7 @@ export function Composer({
       active = false;
       clearTimeout(timer);
     };
-  }, [project.id, project.version, ids, values, standalone, includeContext, aiFormat]);
+  }, [project.id, project.version, ids, values, standalone, includeContext, aiFormat, draft]);
   useEffect(() => {
     if (pending || revealToken === lastReveal.current) return;
     lastReveal.current = revealToken;
@@ -128,7 +131,7 @@ export function Composer({
     if (!result || copying || pending || result.blocked || !ids.length || resolvedKey.current!==inputKey || (inspection?.body!==result.body && !inspectionFailed)) return;
     setCopying(true);
     try {
-      const copied = await copy(result, project.id, values, standalone, maskSensitive && !inspectionFailed, ignored.filter((v) => v.startsWith(`${scope}:`)).map((v) => v.slice(scope.length + 1)), includeContext, aiFormat);
+      const copied = await copy(result, project.id, values, standalone, maskSensitive && !inspectionFailed, ignored.filter((v) => v.startsWith(`${scope}:`)).map((v) => v.slice(scope.length + 1)), includeContext, aiFormat, draft);
       notice(copySuccess(copied.characters, copied.warning));
       onCopied?.();
     } catch (e) {
@@ -160,7 +163,7 @@ export function Composer({
         <h2 ref={heading}>依頼のプレビュー</h2>
         <span className="muted">{ids.length}本を合成</span>
       </div>
-      <details><summary>コピーの設定</summary><label><input type="checkbox" checked={includeContext} onChange={(e)=>{setIncludeContext(e.target.checked);localStorage.setItem(`context:${project.id}`,String(e.target.checked));}} />コピーに文脈ヘッダーを含める</label>{!standalone && <label><input type="checkbox" checked={aiFormat} onChange={(e)=>setAiFormat(e.target.checked)} />プロジェクトで選んだAI向けに整形する（既定：整形なし）</label>}</details>
+      {!draft && <details><summary>コピーの設定</summary><label><input type="checkbox" checked={includeContext} onChange={(e)=>{setIncludeContext(e.target.checked);localStorage.setItem(`context:${project.id}`,String(e.target.checked));}} />コピーに文脈ヘッダーを含める</label>{!standalone && <label><input type="checkbox" checked={aiFormat} onChange={(e)=>setAiFormat(e.target.checked)} />プロジェクトで選んだAI向けに整形する（既定：整形なし）</label>}</details>}
       {!!result?.variables.length && (
         <div className="fields">
           {result.variables.map((v) => (
@@ -226,18 +229,18 @@ export function Composer({
         </p>
       ))}
       <pre aria-busy={pending}>
-        {pending ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={f.rule}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
+        {pending || resolvedKey.current !== inputKey ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={advisoryRuleLabel(f.rule)}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
       </pre>
       {result && <details><summary>詳細・Lint</summary><LintPanel text={result.body} /><p>自由文の意味検査は行いません。</p></details>}
       {inspectionFailed && <p role="status" className="hint">秘密情報の検査を完了できませんでした。未検査の本文をそのままコピーできます。{inspectionFailure?.message}</p>}
       {!!activeFindings.length && <p role="status">秘密情報・個人情報らしき文字列 {activeFindings.length}件。コピー前に確認してください。</p>}
-      {activeFindings.map((f) => <button className="text-button" key={f.fingerprint} onClick={() => { const next=[...ignored,`${scope}:${f.fingerprint}`]; localStorage.setItem("advisory-ignores",JSON.stringify(next.slice(-512))); setIgnored(next); }}>{f.rule}：このプロンプトでは無視</button>)}
+      {!!activeFindings.length && <ul className="advisory-findings" aria-label="検出候補ごとの操作">{activeFindings.map((f, index) => <li key={f.fingerprint}><span>{advisoryRuleLabel(f.rule)} {index + 1}</span><button className="text-button" aria-label={`${advisoryRuleLabel(f.rule)} ${index + 1}をこのプロンプトでは無視`} onClick={() => { const next=[...ignored,`${scope}:${f.fingerprint}`].slice(-512); localStorage.setItem("advisory-ignores",JSON.stringify(next)); setIgnored(next); }}>このプロンプトでは無視</button></li>)}</ul>}
       <div className="footer">
         <span className="muted">コピー時に本文・入力値を記録しません</span>
         <button
           className="primary"
           disabled={
-            !result || pending || copying || result.blocked || !ids.length || (inspection?.body !== result.body && !inspectionFailed)
+            !result || pending || copying || result.blocked || !ids.length || resolvedKey.current !== inputKey || (inspection?.body !== result.body && !inspectionFailed)
           }
           onClick={() => void doCopy()}
         >

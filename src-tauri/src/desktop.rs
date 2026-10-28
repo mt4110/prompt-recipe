@@ -48,6 +48,8 @@ async fn dispatch(
 #[serde(deny_unknown_fields)]
 struct CopyRequest {
     #[serde(default)]
+    draft: Option<application::DraftPrompt>,
+    #[serde(default)]
     standalone: bool,
     #[serde(default)]
     mask_sensitive: bool,
@@ -79,7 +81,9 @@ async fn copy_prompt(
             .lock()
             .map_err(|_| Error::new("copy", "コピーを再試行してください。"))?;
         let ids = request.revision_ids.clone();
+        let record_usage = request.draft.is_none();
         let composed = state.store.call(move |conn| {
+            if let Some(draft)=request.draft { return application::draft_composition(&draft, &request.values); }
             application::output_composition(
                 conn,
                 &request.project_id,
@@ -120,11 +124,11 @@ async fn copy_prompt(
         if let Ok(mut last) = state.last_output_hash.lock() {
             *last = Some(format!("{:x}", Sha256::digest(output.as_bytes())));
         }
-        let warning = state
+        let warning = if record_usage { state
             .store
             .call(move |conn| application::record_use(conn, &request.operation_id, &ids))
             .err()
-            .map(|_| "コピー済みですが利用記録を保存できませんでした。");
+            .map(|_| "コピー済みですが利用記録を保存できませんでした。") } else { None };
         Ok(json!({"copied":true,"warning":warning,"characters":output.chars().count()}))
     })
     .await

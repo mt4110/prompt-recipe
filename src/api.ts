@@ -36,6 +36,7 @@ export async function copy(
   ignored: string[] = [],
   includeContext = false,
   aiFormat = false,
+  draft?: { name: string; body: string },
 ): Promise<{ warning: string | null; characters: number }> {
   if (desktop) {
     const result = await invoke<{ copied: boolean; warning: string | null; characters: number }>(
@@ -43,6 +44,7 @@ export async function copy(
       {
         request: {
           project_id,
+          draft,
           revision_ids: composition.revision_ids,
           values,
           expected_hash: composition.hash,
@@ -55,11 +57,11 @@ export async function copy(
         },
       },
     );
-    sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
+    if(!draft)sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
     window.dispatchEvent(new Event("prompt-copied"));
     return { warning: result.warning, characters: result.characters };
   }
-  const fresh = await request<Composition>("compose", {
+  const fresh = await request<Composition>(draft ? "compose_draft" : "compose", draft ? {draft, values} : {
     project_id,
     standalone,
     include_context: includeContext,
@@ -74,7 +76,7 @@ export async function copy(
     ? await maskedCopyText(fresh.body, ignored)
     : fresh.body;
   await navigator.clipboard.writeText(output);
-  sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
+  if(!draft)sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
     window.dispatchEvent(new Event("prompt-copied"));
   return { warning: "開発用ブラウザでは利用履歴を記録しません。", characters: [...output].length };
 }

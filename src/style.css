@@ -908,3 +908,6 @@ input[type="checkbox"] { width:auto; }
  header .actions { flex-wrap:wrap; }
  .toast { width:calc(100vw - 32px); max-width:600px; }
 }
+
+.advisory-findings { display:grid; gap:8px; padding:0; list-style:none; }
+.advisory-findings li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border:1px solid #e6e9ef; border-radius:8px; padding:8px 12px; }

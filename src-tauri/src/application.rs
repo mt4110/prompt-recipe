@@ -38,6 +38,7 @@ pub enum Request {
         text: String,
         format: String,
     },
+    ComposeDraft { draft: DraftPrompt, values: BTreeMap<String, String> },
     Compose {
         #[serde(default)]
         standalone: bool,
@@ -91,6 +92,14 @@ pub enum Request {
         target: crate::ai::AiTarget,
     },
     CompleteOnboarding,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DraftPrompt { pub name: String, pub body: String }
+pub fn draft_composition(draft: &DraftPrompt, values: &BTreeMap<String,String>) -> Result<Composition> {
+    let variables=names(&draft.body)?.into_iter().map(|name| Variable { name, required:true, default:None }).collect();
+    let recipe=Recipe {id:"onboarding-draft".into(),revision_id:"onboarding-draft".into(),version:1,parent_revision_id:None,name:draft.name.clone(),description:String::new(),body:draft.body.clone(),builtin:false,variables,constraints:vec![],lesson:None,actions:vec![],goals:vec![]};
+    compose(&[recipe], &Project {id:"draft".into(),name:String::new(),environment:"code".into(),reference:String::new(),assignment:vec![],version:1}, values)
 }
 impl Request {
     pub fn is_mutation(&self) -> bool {
@@ -356,7 +365,9 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
             "この保存領域は新しいアプリで作成されています。書き込みを停止しました。",
         ));
     }
-    let tx = conn.transaction().map_err(storage_error)?;
+    // Preview requests initialize separate connections concurrently. Acquire the write
+    // reservation before reading, avoiding a deferred read-to-write upgrade deadlock.
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
     tx.execute_batch("CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY,recipe_id TEXT NOT NULL,data TEXT NOT NULL,reason TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS recipes(id TEXT PRIMARY KEY,current_revision TEXT NOT NULL REFERENCES revisions(id));
         CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,data TEXT NOT NULL);
@@ -436,6 +447,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
 
 pub fn dispatch(conn: &mut Connection, request: Request) -> Result<Value> {
     match request {
+        Request::ComposeDraft { draft, values } => Ok(json!(draft_composition(&draft, &values)?)),
         Request::CheckText { text, ignored } => {
             text_limit(&text)?;
             if ignored.len()>512 { return Err(Error::new("input_limit","無視する検出は512件以内で指定してください。")); }
@@ -800,6 +812,30 @@ pub fn record_use(conn: &mut Connection, operation_id: &str, ids: &[String]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn onboarding_drafts_do_not_create_ledger_rows() {
+        let mut c=database();
+        let before=c.total_changes();
+        let draft=DraftPrompt {name:"下書き".into(),body:"依頼 {{text}}".into()};
+        let values=BTreeMap::from([("text".into(),"テスト".into())]);
+        let result=dispatch(&mut c,Request::ComposeDraft { draft: draft.clone(), values:values.clone() }).expect("draft");
+        assert_eq!(c.total_changes(),before);
+        assert_eq!(result["body"],"依頼 テスト");
+        assert_eq!(result["hash"],draft_composition(&draft,&values).expect("copy recheck").hash);
+        assert!(draft_composition(&draft,&BTreeMap::new()).expect("missing").blocked);
+        let changed=draft_composition(&DraftPrompt{name:draft.name,body:"変更 {{text}}".into()},&values).expect("changed");
+        assert_ne!(result["hash"],changed.hash);
+    }
+    #[test]
+    fn public_text_check_uses_full_numeric_context_policy() {
+        let mut c=database();
+        for (text,expected) in [("0312345678",false),("電話: 0312345678",true),("03-1234-5678",true),("4111111111111111",false),("カード番号: 4111111111111111",true)] {
+            let result=dispatch(&mut c,Request::CheckText{text:text.into(),ignored:vec![]}).expect("public inspection");
+            let direct=serde_json::to_value(crate::advisory::inspect(text)).expect("direct");
+            assert_eq!(result["findings"],direct);
+            assert_eq!(!result["findings"].as_array().expect("findings").is_empty(),expected,"{text}");
+        }
+    }
     #[test]
     fn advisory_does_not_mutate_database_and_body_defaults_are_consistent() {
         let mut c = database();
