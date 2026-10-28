@@ -1,6 +1,6 @@
 # 技術構成
 
-状態：レビュー用初稿 / 2026-10-04。文書内のAPI名はアプリ内契約の提案であり、既存ライブラリAPIとは区別する。
+状態：ローカル実装に合わせて2026-10-28更新。下段の初期設計は履歴を含む。現行の合成・コピー経路は application::output_composition に集約し、設定を含むハッシュをコピー時に再照合する。
 
 ## 1. 技術選択
 
@@ -170,3 +170,7 @@ macOS取り込みはAppKit Servicesを調査対象とする。広告するデー
 通常ページはReact Activityで状態を残し、非表示時の効果を停止する。ネイティブ小窓は遅延生成してhideで保持する。切替時は表示先を表示・フォーカスしてから移動元をhideし、失敗時は表示先を戻す。macOS Reopenで復帰する。全非表示WebViewのCPU停止まで保証しない。
 
 JSON保存とGit選択は通常画面の独自IPCのみ。汎用frontend FS／dialog／shell／HTTP権限は付与しない。ZIPは[安全設計](ZIP-SAFETY.md)段階。初稿の領域分離・セット不変版・意味検査等は将来設計で、現行実装の保証範囲に含めない。
+
+## 現行のUX・検査経路
+
+`output_composition` → `compose_revisions` → `domain::compose` で合成する。文脈ヘッダーとAI向け整形は明示選択だけに限定。`CheckText` は保存処理を呼ばずローカル検出・マスク候補を返す。`copy_prompt` は再合成・ハッシュ照合・再検査を行って選択された出力をコピーする。フロントはUTF-8範囲を復元し検出箇所を表示する。詳細・ルール出所・保存境界は [ADVISORY-CHECKS.md](ADVISORY-CHECKS.md) を参照。
