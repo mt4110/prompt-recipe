@@ -84,3 +84,7 @@ npm exec tauri build -- --debug --bundles app
 ### Node.js とフロントの回帰試験
 
 Node.js 22.18.0以上が必要です。`nvm install && nvm use` で `.nvmrc` のバージョンを使用できます。`npm test` で選択状態・並べ替え、コピー表示、検索分類、Nodeバージョンの回帰試験を実行します。古いNodeでは対応バージョンの案内を出して終了します。
+
+### Rustツールチェーン
+
+このプロジェクトはRust 1.99.1を使用します。`rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy` を実行してください。`npm run test:core`、`npm run preview:core`、`npm run tauri -- build --debug --no-bundle` は固定したRustで実行します。直接cargoを使う場合も `rustup run 1.99.1 cargo …` を使用できます。システム全体のRust設定の変更は不要です。[依存更新・監査・移行検証](docs/DEPENDENCY-UPGRADE-2026-10-28.md)も参照してください。
