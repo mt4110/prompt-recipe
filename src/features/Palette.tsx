@@ -23,7 +23,8 @@ export function Palette({
   const [filter, setFilter] = useState(emptyFilter);
   const query = filter.query;
   const [selected, setSelected] = useState(0);
-  const [ids, setIds] = useState(project.assignment);
+  const [ids, setIds] = useState<string[]>([]);
+  const [previousIds, setPreviousIds] = useState<string[]>(project.assignment);
   const [values, setValues] = useState<Record<string, string>>({});
   const input = useRef<HTMLInputElement>(null);
   const filtered = discover(snapshot.recipes, filter);
@@ -44,7 +45,8 @@ export function Palette({
     };
   }, []);
   useEffect(() => {
-    setIds(project.assignment);
+    setPreviousIds(project.assignment);
+    setIds([]);
     setValues({});
   }, [project.id, project.version]);
   return (
@@ -101,6 +103,11 @@ export function Palette({
           ? ` · ${aiProfile[snapshot.ai_target.surface]}`
           : ""}
       </p>
+      {!ids.length && previousIds.length > 0 && (
+        <button className="text-button" onClick={() => setIds(previousIds)}>
+          前回の続き（プロジェクトのセット）
+        </button>
+      )}
       <input
         ref={input}
         type="search"
@@ -146,6 +153,9 @@ export function Palette({
           }
         }}
       />
+      <p className="muted palette-keys">
+        ↑↓で移動 / Enterで選択 / {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Enterでコピー / Escで閉じる
+      </p>
       <RecipeFilters
         search={false}
         value={filter}
