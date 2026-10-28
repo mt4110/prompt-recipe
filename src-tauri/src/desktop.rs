@@ -117,7 +117,7 @@ async fn copy_prompt(
                 })?;
             }
         }
-        Ok(json!({"copied":true,"warning":warning}))
+        Ok(json!({"copied":true,"warning":warning,"characters":composed.body.chars().count()}))
     })
     .await
     .map_err(|_| Error::new("worker", "コピー処理が停止しました。"))?

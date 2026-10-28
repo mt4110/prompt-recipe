@@ -106,8 +106,8 @@ export function Composer({
     if (!result || copying || pending || result.blocked || !ids.length) return;
     setCopying(true);
     try {
-      const warning = await copy(result, project.id, values, standalone);
-      notice(warning || "コピーしました");
+      const copied = await copy(result, project.id, values, standalone);
+      notice(`コピーしました（${copied.characters}文字）${copied.warning ? ` · ${copied.warning}` : ""}`);
       onCopied?.();
     } catch (e) {
       notice(message(e));

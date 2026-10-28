@@ -25,9 +25,9 @@ export async function copy(
   project_id: string,
   values: Record<string, string>,
   standalone = false,
-): Promise<string | null> {
+): Promise<{ warning: string | null; characters: number }> {
   if (desktop) {
-    const result = await invoke<{ copied: boolean; warning: string | null }>(
+    const result = await invoke<{ copied: boolean; warning: string | null; characters: number }>(
       "copy_prompt",
       {
         request: {
@@ -40,7 +40,7 @@ export async function copy(
         },
       },
     );
-    return result.warning;
+    return { warning: result.warning, characters: result.characters };
   }
   const fresh = await request<Composition>("compose", {
     project_id,
@@ -51,7 +51,7 @@ export async function copy(
   if (fresh.hash !== composition.hash || fresh.blocked)
     throw new Error("内容が変わりました。プレビューを確認してください。");
   await navigator.clipboard.writeText(fresh.body);
-  return "開発用ブラウザでは利用履歴を記録しません。";
+  return { warning: "開発用ブラウザでは利用履歴を記録しません。", characters: [...fresh.body].length };
 }
 export async function readMaterial(): Promise<{
   text: string;
