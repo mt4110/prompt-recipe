@@ -18,3 +18,7 @@ test("preview shortcuts honor all modifiers and reject IME and repeat events",()
  assert.equal(matchesShortcut(e,"Alt+Space"),true);assert.equal(matchesShortcut({...e,shiftKey:true} as KeyboardEvent,"Alt+Space"),false);
  assert.equal(matchesShortcut({...e,isComposing:true} as KeyboardEvent,"Alt+Space"),false);assert.equal(matchesShortcut({...e,repeat:true} as KeyboardEvent,"Alt+Space"),false);
 });
+
+test("function key labels retain F for every supported key",()=>{
+ for(let n=1;n<=24;n++){assert.equal(shortcutLabel(`Alt+F${n}`,true),`⌥F${n}`);assert.equal(shortcutLabel(`Control+F${n}`,false),`Ctrl+F${n}`);}
+});

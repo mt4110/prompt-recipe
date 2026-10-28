@@ -113,10 +113,9 @@ export function Composer({
       return;
     lastFocus.current = focusToken;
     const root = heading.current?.closest("section");
-    const target = root?.querySelector<HTMLElement>(
-      ".fields textarea, .footer button",
-    );
+    const target = root?.querySelector<HTMLElement>(".fields textarea") || heading.current;
     target?.focus();
+    if (standalone) heading.current?.scrollIntoView({block: "start"});
   }, [pending, result, focusToken, ids]);
   const [inspection, setInspection] = useState<{body:string; masked:string; findings:{rule:string;start:number;end:number;fingerprint:string;fingerprints:string[]}[]} | null>(null);
   const [inspectionFailure, setInspectionFailure] = useState<{body:string;message:string} | null>(null);
@@ -162,7 +161,7 @@ export function Composer({
       }}
     >
       <div className="section-title">
-        <h2 ref={heading}>依頼のプレビュー</h2>
+        <h2 ref={heading} tabIndex={-1}>依頼のプレビュー</h2>
         <span className="muted">{ids.length}本を合成</span>
       </div>
       {!draft && <details><summary>コピーの設定</summary><label><input type="checkbox" checked={includeContext} onChange={(e)=>{setIncludeContext(e.target.checked);localStorage.setItem(`context:${project.id}`,String(e.target.checked));}} />コピーに文脈ヘッダーを含める</label>{!standalone && <label><input type="checkbox" checked={aiFormat} onChange={(e)=>setAiFormat(e.target.checked)} />プロジェクトで選んだAI向けに整形する（既定：整形なし）</label>}</details>}
@@ -230,15 +229,16 @@ export function Composer({
           {d.message}
         </p>
       ))}
-      <pre aria-busy={pending}>
-        {pending || resolvedKey.current !== inputKey ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={advisoryRuleLabel(f.rule)}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
-      </pre>
       {inspectionFailed && <p role="status" className="hint">秘密情報の検査を完了できませんでした。未検査の本文をそのままコピーできます。{inspectionFailure?.message}</p>}
       {!!activeFindings.length && <section className="advisory-review" aria-label="コピー前の検出確認">
         <h3>コピー前の確認</h3>
       {!!activeFindings.length && <p role="status">秘密情報・個人情報らしき文字列 {activeFindings.length}件。コピー前に確認してください。</p>}
       {!!activeFindings.length && <ul className="advisory-findings" aria-label="検出候補ごとの操作">{activeFindings.map((f, index) => <li key={f.fingerprint}><span>{advisoryRuleLabel(f.rule)} {index + 1}</span><button className="text-button" aria-label={`${advisoryRuleLabel(f.rule)} ${index + 1}をこのプロンプトでは無視`} onClick={() => { const next=[...ignored,`${scope}:${f.fingerprint}`].slice(-512); localStorage.setItem("advisory-ignores",JSON.stringify(next)); setIgnored(next); }}>このプロンプトでは無視</button></li>)}</ul>}
       </section>}
+      {result && !pending && !inspection && !inspectionFailed && <p role="status">コピー前の検査中…</p>}
+      <pre aria-busy={pending}>
+        {pending || resolvedKey.current !== inputKey ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={advisoryRuleLabel(f.rule)}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
+      </pre>
       <div className="footer">
         <span className="muted">コピー時に本文・入力値を記録しません</span>
         <button
