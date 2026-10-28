@@ -10,3 +10,5 @@ pub mod lint;
 pub mod repository;
 
 pub mod portable;
+
+pub mod hash;

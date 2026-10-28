@@ -1,7 +1,6 @@
 //! Local advisory checks. Findings never contain the matched text.
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 #[derive(Clone, Debug, Serialize)]
 pub struct Finding {
@@ -132,9 +131,8 @@ fn candidates(text: &str) -> Vec<Finding> {
                     start,
                     end,
                     fingerprints: vec![],
-                    fingerprint: format!(
-                        "{:x}",
-                        Sha256::digest(format!("{}:{}", id, &text[start..end]).as_bytes())
+                    fingerprint: crate::hash::sha256(
+                        format!("{}:{}", id, &text[start..end]).as_bytes(),
                     ),
                 });
             }
@@ -160,10 +158,7 @@ fn merge_findings(text: &str, findings: Vec<Finding>) -> Vec<Finding> {
     for f in &mut merged {
         f.fingerprints.sort();
         f.fingerprints.dedup();
-        f.fingerprint = format!(
-            "{:x}",
-            Sha256::digest(format!("merged:{}", &text[f.start..f.end]).as_bytes())
-        );
+        f.fingerprint = crate::hash::sha256(format!("merged:{}", &text[f.start..f.end]).as_bytes());
     }
     merged
 }

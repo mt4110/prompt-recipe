@@ -1,7 +1,6 @@
 use crate::{application, domain::*, infrastructure::Store};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, sync::Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -117,7 +116,7 @@ async fn copy_prompt(
             )
         })?;
         if let Ok(mut last) = state.last_output_hash.lock() {
-            *last = Some(format!("{:x}", Sha256::digest(output.as_bytes())));
+            *last = Some(crate::hash::sha256(output.as_bytes()));
         }
         let warning = if record_usage {
             state
@@ -233,7 +232,7 @@ fn read_material(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<
         .last_output_hash
         .lock()
         .map_err(|_| Error::new("clipboard", "コピー状態を取得できません。"))?;
-    let digest = format!("{:x}", Sha256::digest(text.as_bytes()));
+    let digest = crate::hash::sha256(text.as_bytes());
     Ok(json!({"text":text,"is_previous_output":previous.as_ref()==Some(&digest)}))
 }
 #[tauri::command]

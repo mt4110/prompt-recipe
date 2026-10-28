@@ -2,7 +2,6 @@ use crate::domain::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -297,19 +296,16 @@ pub fn output_composition(
         );
         text_limit(&result.body)?;
     }
-    result.hash = format!(
-        "{:x}",
-        Sha256::digest(
-            encode(&(
-                &result.body,
-                &result.revision_ids,
-                &result.diagnostics,
-                standalone,
-                include_context,
-                ai_format
-            ))?
-            .as_bytes()
-        )
+    result.hash = crate::hash::sha256(
+        encode(&(
+            &result.body,
+            &result.revision_ids,
+            &result.diagnostics,
+            standalone,
+            include_context,
+            ai_format,
+        ))?
+        .as_bytes(),
     );
     Ok(result)
 }
@@ -389,7 +385,7 @@ fn inspect_import(conn: &Connection, catalog: &Catalog) -> Result<Value> {
         changes.push(json!({"name":recipe.name,"from":from,"to":recipe.version,"action":if from==0 {"追加"} else {"新版を追加"}}));
     }
     let encoded = encode(&(catalog, &changes))?;
-    Ok(json!({"changes":changes,"plan_hash":format!("{:x}",Sha256::digest(encoded.as_bytes()))}))
+    Ok(json!({"changes":changes,"plan_hash":crate::hash::sha256(encoded.as_bytes())}))
 }
 
 pub fn initialize(conn: &mut Connection) -> Result<()> {
