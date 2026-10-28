@@ -17,6 +17,8 @@ fn main() {
         let request: Request =
             serde_json::from_str(&text).map_err(|_| Error::new("request", "Invalid request"))?;
         let mut conn = rusqlite::Connection::open(path).map_err(application::storage_error)?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(application::storage_error)?;
         application::initialize(&mut conn)?;
         application::dispatch(&mut conn, request)
     })();

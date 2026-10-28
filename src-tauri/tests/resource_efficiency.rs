@@ -19,7 +19,10 @@ fn shared_pack_is_bounded_and_valid_without_revising_existing_recipes() {
         validate_recipe(recipe).expect("valid shared recipe");
         assert!(ids.insert(recipe.id.clone()));
         assert!(revisions.insert(recipe.revision_id.clone()));
-        assert!(!recipe.builtin, "shared pack must remain explicitly imported");
+        assert!(
+            !recipe.builtin,
+            "shared pack must remain explicitly imported"
+        );
         assert_eq!(recipe.version, 1);
         assert!(recipe.parent_revision_id.is_none());
         assert!(recipe.variables.is_empty());

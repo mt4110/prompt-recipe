@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAX_TEXT: usize = 256 * 1024;
@@ -374,18 +373,9 @@ pub fn compose(
                 "展開した指示が256 KiBを超えています。",
             ));
         }
-        bodies.push(format!("【{}】\n{}", recipe.name, expanded));
+        bodies.push(expanded);
     }
-    let body = format!(
-        "【プロジェクト】{}\n【利用環境】{}\n\n{}",
-        project.name,
-        if project.environment == "chat" {
-            "チャットのみ"
-        } else {
-            "コード参照あり"
-        },
-        bodies.join("\n\n")
-    );
+    let body = bodies.join("\n\n");
     text_limit(&body)?;
     let blocked = revision_ids.is_empty()
         || diagnostics
@@ -393,7 +383,7 @@ pub fn compose(
             .any(|d| ["conflict", "incompatible", "missing"].contains(&d.kind.as_str()));
     let hash_input = serde_json::to_vec(&(body.as_str(), &revision_ids, &diagnostics))
         .map_err(|_| Error::new("serialization", "指示の確認に失敗しました。"))?;
-    let hash = format!("{:x}", Sha256::digest(hash_input));
+    let hash = crate::hash::sha256(hash_input);
     Ok(Composition {
         body,
         hash,

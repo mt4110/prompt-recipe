@@ -5,7 +5,6 @@ use crate::{
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -306,10 +305,7 @@ pub fn inspect(c: &Connection, pack: &Archive) -> Result<Value> {
         }
         changes.push(json!({"name":s.name,"from":0,"to":s.version,"action":"セットを導入"}));
     }
-    let hash = format!(
-        "{:x}",
-        Sha256::digest(encoded(&(pack, &changes))?.as_bytes())
-    );
+    let hash = crate::hash::sha256(encoded(&(pack, &changes))?.as_bytes());
     Ok(json!({"changes":changes,"plan_hash":hash}))
 }
 pub fn import(c: &mut Connection, pack: Archive, expected: String) -> Result<()> {

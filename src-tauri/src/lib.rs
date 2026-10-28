@@ -1,3 +1,4 @@
+pub mod advisory;
 pub mod ai;
 pub mod application;
 #[cfg(feature = "desktop")]
@@ -9,3 +10,5 @@ pub mod lint;
 pub mod repository;
 
 pub mod portable;
+
+pub mod hash;

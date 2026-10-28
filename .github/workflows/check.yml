@@ -18,9 +18,28 @@ jobs:
         with:
           node-version: '26'
           cache: npm
+      - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: npm ci
       - run: npm run build
-      - run: npm run test:discovery
+      - run: npm test
+      - run: npm audit --audit-level=moderate
       - run: npm run check:boundary
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - run: python3 scripts/check-vendor-patches.py
+      - run: rustup run 1.99.1 cargo install --locked cargo-audit --version 0.22.2
+      - run: cargo audit --file src-tauri/Cargo.lock --deny warnings
+      - run: python3 scripts/check-vendor-patches.py --upstream --audit-upstream
+      - run: rustup run 1.99.1 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - run: rustup run 1.99.1 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - run: rustup run 1.99.1 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
+      - run: rustup run 1.99.1 cargo check --manifest-path src-tauri/Cargo.toml --locked
+  security-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          clean: false
+      - run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev pkg-config
+      - run: rustup toolchain install 1.99.1 --profile minimal
+      - run: python3 scripts/check-vendor-patches.py
+      - run: rustup run 1.99.1 cargo test --manifest-path src-tauri/Cargo.toml -p glib-regression --release --locked

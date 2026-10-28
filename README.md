@@ -74,3 +74,17 @@ npm exec tauri build -- --debug --bundles app
 6. [タスク](TASKS.md)：未着手・完了の記録。
 
 設計初稿：2026-10-04。会話で合意した要求と、レビュー対象の提案を区別している。実装・公開・配布の承認を代行する文書ではない。
+
+## 日常の使い方
+
+名前と本文を登録し、`{{variable}}` の入力を埋めてコピーします。サンプルからも始められます。複数選択はタブ横断で表示し、チップで順序と解除を操作できます。本文だけのコピーが既定で、文脈ヘッダー・AI向け整形は任意です。
+
+コピー前にローカルで秘密情報・個人情報らしきパターンを示し、マスクしてコピー／そのままコピーを選べます。未知形式の見逃し・誤検知があり、AIへ直接貼ったテキストは見えません。意味検査やDLPの代わりにはなりません。[ルールの出所・保存境界・検証の限界](docs/ADVISORY-CHECKS.md)を確認してください。
+
+### Node.js とフロントの回帰試験
+
+Node.js 22.18.0以上が必要です。`nvm install && nvm use` で `.nvmrc` のバージョンを使用できます。`npm test` で選択状態・並べ替え、コピー表示、検索分類、Nodeバージョンの回帰試験を実行します。古いNodeでは対応バージョンの案内を出して終了します。
+
+### Rustツールチェーン
+
+このプロジェクトはRust 1.99.1を使用します。`rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy` を実行してください。`npm run test:core`、`npm run preview:core`、`npm run tauri -- build --debug --no-bundle` は固定したRustで実行します。直接cargoを使う場合も `rustup run 1.99.1 cargo …` を使用できます。システム全体のRust設定の変更は不要です。[依存更新・監査・移行検証](docs/DEPENDENCY-UPGRADE-2026-10-28.md)も参照してください。

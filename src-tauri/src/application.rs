@@ -2,7 +2,6 @@ use crate::domain::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -29,13 +28,26 @@ pub enum Request {
         archive: crate::portable::Archive,
         expected_plan: String,
     },
+    CheckText {
+        text: String,
+        #[serde(default)]
+        ignored: Vec<String>,
+    },
     Lint {
         text: String,
         format: String,
     },
+    ComposeDraft {
+        draft: DraftPrompt,
+        values: BTreeMap<String, String>,
+    },
     Compose {
         #[serde(default)]
         standalone: bool,
+        #[serde(default)]
+        include_context: bool,
+        #[serde(default)]
+        ai_format: bool,
         project_id: String,
         revision_ids: Vec<String>,
         values: BTreeMap<String, String>,
@@ -83,6 +95,52 @@ pub enum Request {
     },
     CompleteOnboarding,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DraftPrompt {
+    pub name: String,
+    pub body: String,
+}
+pub fn draft_composition(
+    draft: &DraftPrompt,
+    values: &BTreeMap<String, String>,
+) -> Result<Composition> {
+    let variables = names(&draft.body)?
+        .into_iter()
+        .map(|name| Variable {
+            name,
+            required: true,
+            default: None,
+        })
+        .collect();
+    let recipe = Recipe {
+        id: "onboarding-draft".into(),
+        revision_id: "onboarding-draft".into(),
+        version: 1,
+        parent_revision_id: None,
+        name: draft.name.clone(),
+        description: String::new(),
+        body: draft.body.clone(),
+        builtin: false,
+        variables,
+        constraints: vec![],
+        lesson: None,
+        actions: vec![],
+        goals: vec![],
+    };
+    compose(
+        &[recipe],
+        &Project {
+            id: "draft".into(),
+            name: String::new(),
+            environment: "code".into(),
+            reference: String::new(),
+            assignment: vec![],
+            version: 1,
+        },
+        values,
+    )
+}
 impl Request {
     pub fn is_mutation(&self) -> bool {
         matches!(
@@ -101,7 +159,7 @@ impl Request {
     pub fn palette_allowed(&self) -> bool {
         matches!(
             self,
-            Self::Snapshot | Self::Lint { .. } | Self::Compose { .. }
+            Self::Snapshot | Self::CheckText { .. } | Self::Lint { .. } | Self::Compose { .. }
         )
     }
 }
@@ -154,12 +212,12 @@ pub fn composition(
         .iter()
         .map(|id| revision(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let result = compose(&recipes, &project(conn, project_id)?, values)?;
-    if let Some(target) = ai_target(conn, project_id)? {
-        crate::ai::adapt(result, &target)
-    } else {
-        Ok(result)
-    }
+    compose_revisions(
+        &recipes,
+        &project(conn, project_id)?,
+        values,
+        ai_target(conn, project_id)?,
+    )
 }
 
 pub fn ledger_composition(
@@ -177,7 +235,7 @@ pub fn ledger_composition(
         .iter()
         .map(|id| revision(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    compose(
+    compose_revisions(
         &recipes,
         &Project {
             id: "ledger".into(),
@@ -188,7 +246,68 @@ pub fn ledger_composition(
             version: 1,
         },
         values,
+        None,
     )
+}
+
+fn compose_revisions(
+    recipes: &[Recipe],
+    project: &Project,
+    values: &BTreeMap<String, String>,
+    target: Option<crate::ai::AiTarget>,
+) -> Result<Composition> {
+    let composed = compose(recipes, project, values)?;
+    match target {
+        Some(target) => crate::ai::adapt(composed, &target),
+        None => Ok(composed),
+    }
+}
+pub fn output_composition(
+    conn: &Connection,
+    project_id: &str,
+    ids: &[String],
+    values: &BTreeMap<String, String>,
+    standalone: bool,
+    include_context: bool,
+    ai_format: bool,
+) -> Result<Composition> {
+    let mut result = if standalone {
+        ledger_composition(conn, ids, values)?
+    } else if ai_format {
+        composition(conn, project_id, ids, values)?
+    } else {
+        if ids.len() > 32 {
+            return Err(Error::new(
+                "input_limit",
+                "プロンプトは32件以内で選んでください。",
+            ));
+        }
+        let recipes = ids
+            .iter()
+            .map(|id| revision(conn, id))
+            .collect::<Result<Vec<_>>>()?;
+        compose_revisions(&recipes, &project(conn, project_id)?, values, None)?
+    };
+    if include_context {
+        let p = project(conn, project_id)?;
+        result.body = format!(
+            "【プロジェクト】{}\n【利用環境】{}\n\n{}",
+            p.name, p.environment, result.body
+        );
+        text_limit(&result.body)?;
+    }
+    result.hash = crate::hash::sha256(
+        encode(&(
+            &result.body,
+            &result.revision_ids,
+            &result.diagnostics,
+            standalone,
+            include_context,
+            ai_format,
+        ))?
+        .as_bytes(),
+    );
+    Ok(result)
 }
 fn ai_target(conn: &Connection, project_id: &str) -> Result<Option<crate::ai::AiTarget>> {
     let data: Option<String> = conn
@@ -266,7 +385,7 @@ fn inspect_import(conn: &Connection, catalog: &Catalog) -> Result<Value> {
         changes.push(json!({"name":recipe.name,"from":from,"to":recipe.version,"action":if from==0 {"追加"} else {"新版を追加"}}));
     }
     let encoded = encode(&(catalog, &changes))?;
-    Ok(json!({"changes":changes,"plan_hash":format!("{:x}",Sha256::digest(encoded.as_bytes()))}))
+    Ok(json!({"changes":changes,"plan_hash":crate::hash::sha256(encoded.as_bytes())}))
 }
 
 pub fn initialize(conn: &mut Connection) -> Result<()> {
@@ -283,7 +402,11 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
             "この保存領域は新しいアプリで作成されています。書き込みを停止しました。",
         ));
     }
-    let tx = conn.transaction().map_err(storage_error)?;
+    // Preview requests initialize separate connections concurrently. Acquire the write
+    // reservation before reading, avoiding a deferred read-to-write upgrade deadlock.
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(storage_error)?;
     tx.execute_batch("CREATE TABLE IF NOT EXISTS revisions(id TEXT PRIMARY KEY,recipe_id TEXT NOT NULL,data TEXT NOT NULL,reason TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS recipes(id TEXT PRIMARY KEY,current_revision TEXT NOT NULL REFERENCES revisions(id));
         CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,data TEXT NOT NULL);
@@ -363,6 +486,18 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
 
 pub fn dispatch(conn: &mut Connection, request: Request) -> Result<Value> {
     match request {
+        Request::ComposeDraft { draft, values } => Ok(json!(draft_composition(&draft, &values)?)),
+        Request::CheckText { text, ignored } => {
+            text_limit(&text)?;
+            if ignored.len() > 512 {
+                return Err(Error::new(
+                    "input_limit",
+                    "無視する検出は512件以内で指定してください。",
+                ));
+            }
+            let findings = crate::advisory::inspect_ignoring(&text, &ignored);
+            Ok(json!({"masked":crate::advisory::mask(&text,&findings),"findings":findings}))
+        }
         Request::SaveSet {
             set,
             expected_version,
@@ -455,14 +590,20 @@ pub fn dispatch(conn: &mut Connection, request: Request) -> Result<Value> {
         }
         Request::Compose {
             standalone,
+            include_context,
+            ai_format,
             project_id,
             revision_ids,
             values,
-        } => Ok(json!(if standalone {
-            ledger_composition(conn, &revision_ids, &values)?
-        } else {
-            composition(conn, &project_id, &revision_ids, &values)?
-        })),
+        } => Ok(json!(output_composition(
+            conn,
+            &project_id,
+            &revision_ids,
+            &values,
+            standalone,
+            include_context,
+            ai_format
+        )?)),
         Request::SaveRecipe {
             recipe_id,
             expected_revision,
@@ -713,6 +854,102 @@ pub fn record_use(conn: &mut Connection, operation_id: &str, ids: &[String]) -> 
 mod tests {
     use super::*;
     #[test]
+    fn onboarding_drafts_do_not_create_ledger_rows() {
+        let mut c = database();
+        let before = c.total_changes();
+        let draft = DraftPrompt {
+            name: "下書き".into(),
+            body: "依頼 {{text}}".into(),
+        };
+        let values = BTreeMap::from([("text".into(), "テスト".into())]);
+        let result = dispatch(
+            &mut c,
+            Request::ComposeDraft {
+                draft: draft.clone(),
+                values: values.clone(),
+            },
+        )
+        .expect("draft");
+        assert_eq!(c.total_changes(), before);
+        assert_eq!(result["body"], "依頼 テスト");
+        assert_eq!(
+            result["hash"],
+            draft_composition(&draft, &values)
+                .expect("copy recheck")
+                .hash
+        );
+        assert!(
+            draft_composition(&draft, &BTreeMap::new())
+                .expect("missing")
+                .blocked
+        );
+        let changed = draft_composition(
+            &DraftPrompt {
+                name: draft.name,
+                body: "変更 {{text}}".into(),
+            },
+            &values,
+        )
+        .expect("changed");
+        assert_ne!(result["hash"], changed.hash);
+    }
+    #[test]
+    fn public_text_check_uses_full_numeric_context_policy() {
+        let mut c = database();
+        for (text, expected) in [
+            ("0312345678", false),
+            ("電話: 0312345678", true),
+            ("03-1234-5678", true),
+            ("4111111111111111", false),
+            ("カード番号: 4111111111111111", true),
+        ] {
+            let result = dispatch(
+                &mut c,
+                Request::CheckText {
+                    text: text.into(),
+                    ignored: vec![],
+                },
+            )
+            .expect("public inspection");
+            let direct = serde_json::to_value(crate::advisory::inspect(text)).expect("direct");
+            assert_eq!(result["findings"], direct);
+            assert_eq!(
+                !result["findings"].as_array().expect("findings").is_empty(),
+                expected,
+                "{text}"
+            );
+        }
+    }
+    #[test]
+    fn advisory_does_not_mutate_database_and_body_defaults_are_consistent() {
+        let mut c = database();
+        let before = c.total_changes();
+        let response = dispatch(
+            &mut c,
+            Request::CheckText {
+                text: "API_SECRET=dummy-regression".into(),
+                ignored: vec![],
+            },
+        )
+        .expect("inspect");
+        assert_eq!(c.total_changes(), before);
+        assert!(!response.to_string().contains("dummy-regression"));
+        assert_eq!(response["masked"], "[MASKED]");
+        let ids = vec!["builtin-01-v1".into()];
+        let values = BTreeMap::from([("reference".into(), "dummy-reference".into())]);
+        let plain =
+            output_composition(&c, "personal", &ids, &values, true, false, false).expect("plain");
+        let again =
+            output_composition(&c, "personal", &ids, &values, true, false, false).expect("same");
+        assert_eq!(plain.body, again.body);
+        assert_eq!(plain.hash, again.hash);
+        assert!(!plain.body.contains("【プロジェクト】"));
+        let header =
+            output_composition(&c, "personal", &ids, &values, true, true, false).expect("context");
+        assert!(header.body.starts_with("【プロジェクト】"));
+        assert_ne!(plain.hash, header.hash);
+    }
+    #[test]
     fn classified_seed_keeps_legacy_bytes_and_assignment() {
         let mut c = database();
         let legacy: Catalog =
@@ -739,7 +976,7 @@ mod tests {
         assert_eq!(stored, bytes);
         assert_eq!(
             project(&c, "personal").expect("project").assignment,
-            [old.revision_id.clone()]
+            std::slice::from_ref(&old.revision_id)
         );
         let snap = dispatch(&mut c, Request::Snapshot).expect("snapshot");
         assert_eq!(snap["recipes"].as_array().expect("recipes").len(), 13);

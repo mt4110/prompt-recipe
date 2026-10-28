@@ -2,7 +2,6 @@
 use crate::domain::{text_limit, Composition, Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +98,7 @@ pub fn adapt(mut result: Composition, target: &AiTarget) -> Result<Composition> 
         target,
     ))
     .map_err(|_| Error::new("serialization", "指示の確認に失敗しました。"))?;
-    result.hash = format!("{:x}", Sha256::digest(input));
+    result.hash = crate::hash::sha256(input);
     Ok(result)
 }
 

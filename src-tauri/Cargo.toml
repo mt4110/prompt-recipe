@@ -1,7 +1,8 @@
 [package]
 name = "prompt-recipe"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+rust-version = "1.99"
 default-run = "prompt-recipe"
 
 [lib]
@@ -10,7 +11,7 @@ name = "prompt_recipe"
 [features]
 default = ["desktop"]
 custom-protocol = ["tauri/custom-protocol"]
-desktop = ["dep:tauri", "dep:tauri-plugin-clipboard-manager", "dep:tauri-plugin-global-shortcut", "dep:tauri-build", "dep:tauri-plugin-dialog"]
+desktop = ["dep:tauri-plugin-os", "dep:tauri", "dep:tauri-plugin-clipboard-manager", "dep:tauri-plugin-global-shortcut", "dep:tauri-build", "dep:tauri-plugin-dialog"]
 
 [[bin]]
 name = "prompt-recipe"
@@ -22,16 +23,29 @@ name = "recipe-preview"
 path = "src/bin/preview.rs"
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
-uuid = { version = "1", features = ["v4", "serde"] }
-sha2 = "0.10"
+tauri-plugin-os = { version = "=2.4.0", optional = true }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+rusqlite = { version = "0.41.0", features = ["bundled"] }
+uuid = { version = "1.29.0", features = ["v4", "serde"] }
+sha2 = "0.11.1"
 quick-xml = "=0.42.0"
-tauri-plugin-dialog = { version = "=2.8.1", optional = true }
-tauri = { version = "2", optional = true , features = [] }
-tauri-plugin-clipboard-manager = { version = "2", optional = true }
-tauri-plugin-global-shortcut = { version = "2", optional = true }
+regex = "=1.13.1"
+tauri-plugin-dialog = { version = "=2.8.4", optional = true }
+tauri = { version = "2.12.5", optional = true , features = [] }
+tauri-plugin-clipboard-manager = { version = "2.5.0", optional = true }
+tauri-plugin-global-shortcut = { version = "2.4.1", optional = true }
 
 [build-dependencies]
-tauri-build = { version = "2", optional = true , features = [] }
+tauri-build = { version = "2.7.4", optional = true , features = [] }
+
+[patch.crates-io]
+glib = { path = "vendor/glib" }
+glib-macros = { path = "vendor/glib-macros" }
+gtk3-macros = { path = "vendor/gtk3-macros" }
+
+[workspace]
+resolver = "2"
+members = ["security-tests/glib-regression"]
+exclude = ["vendor/glib", "vendor/glib-macros", "vendor/gtk3-macros"]
+default-members = ["."]

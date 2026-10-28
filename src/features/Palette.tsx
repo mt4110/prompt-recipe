@@ -1,9 +1,13 @@
+import { ui } from "../i18n";
+import { isMac } from "../platform";
 import { useEffect, useRef, useState } from "react";
 import { events, paletteAction } from "../api";
 import type { Snapshot } from "../types";
 import { discover, emptyFilter } from "../discovery";
 import { RecipeFilters } from "./RecipeFilters";
 import { Composer } from "./Composer";
+type PaletteSession = { ids: string[]; values: Record<string, string> };
+const previousSessions = new Map<string, PaletteSession>();
 export function Palette({
   snapshot,
   notice,
@@ -16,23 +20,33 @@ export function Palette({
   const project =
     snapshot.projects.find((p) => p.id === snapshot.active_project) ||
     snapshot.projects[0];
-  const aiProfile = snapshot.ai_catalog.profiles.find(
-    (p) => p.id === snapshot.ai_target?.profile_id,
-  );
   const [focusToken, setFocusToken] = useState(0);
   const [filter, setFilter] = useState(emptyFilter);
   const query = filter.query;
   const [selected, setSelected] = useState(0);
-  const [ids, setIds] = useState(project.assignment);
+  const [ids, setIds] = useState<string[]>([]);
+  const [previousIds, setPreviousIds] = useState<string[]>(previousSessions.get(project.id)?.ids || []);
+  const [closeAfterCopy, setCloseAfterCopy] = useState(() => localStorage.getItem("palette-close-after-copy") !== "false");
+  const sessionProject = useRef(project.id);
+  const currentIds = useRef<string[]>([]);
+  const previousValues = useRef<Record<string,string>>(previousSessions.get(project.id)?.values || {});
+  const currentValues = useRef<Record<string,string>>({});
   const [values, setValues] = useState<Record<string, string>>({});
   const input = useRef<HTMLInputElement>(null);
   const filtered = discover(snapshot.recipes, filter);
   const browsing = !!(query || filter.action || filter.goal);
   useEffect(() => {
+    if (sessionProject.current === project.id && ids.length) previousSessions.set(project.id, {ids, values});
+  }, [project.id, ids, values]);
+  currentIds.current = ids;
+  currentValues.current = values;
+  useEffect(() => {
     input.current?.focus();
     let cleanup: () => void = () => {};
     let disposed = false;
     void events("palette-open", () => {
+      if(currentIds.current.length) { setPreviousIds(currentIds.current); previousValues.current=currentValues.current; }
+      setIds([]); setValues({}); setFilter(emptyFilter); setSelected(0);
       input.current?.focus();
     }).then((fn) => {
       if (disposed) fn();
@@ -44,15 +58,19 @@ export function Palette({
     };
   }, []);
   useEffect(() => {
-    setIds(project.assignment);
+    setIds([]);
     setValues({});
+    sessionProject.current=project.id;
+    const previous=previousSessions.get(project.id);
+    setPreviousIds(previous?.ids || []);
+    previousValues.current=previous?.values || {};
   }, [project.id, project.version]);
   return (
     <div
       className="palette"
       role="dialog"
       aria-modal="true"
-      aria-label="レシピの小窓"
+      aria-label={ui.paletteLabel}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
@@ -96,16 +114,17 @@ export function Palette({
         </button>
       </div>
       <p className="muted">
-        {project.name} · {ids.length}本のセット
-        {aiProfile && snapshot.ai_target
-          ? ` · ${aiProfile[snapshot.ai_target.surface]}`
-          : ""}
+        {snapshot.repositories[project.id] ? project.name : ui.noProject} · {ids.length}本選択中
       </p>
+      <div className="palette-resume">
+        <button className="text-button" disabled={!previousIds.length} onClick={() => {setIds(previousIds);setValues(previousValues.current);setFocusToken(v=>v+1);}}>前回の続き</button>
+        <span className="muted">{previousIds.length ? "このプロジェクトで前回使った小窓の内容に戻ります。" : "このプロジェクトで小窓を使うと、前回の内容に戻れます。"}アプリを閉じると消えます。</span>
+      </div>
       <input
         ref={input}
         type="search"
-        aria-label="レシピを検索"
-        placeholder="別のレシピを使う…"
+        aria-label="プロンプトを検索"
+        placeholder="プロンプトを検索…"
         value={query}
         onChange={(e) => {
           setFilter({ ...filter, query: e.target.value });
@@ -146,6 +165,9 @@ export function Palette({
           }
         }}
       />
+      <p className="muted palette-keys">
+        ↑↓で移動 / Enterで選択 / {isMac() ? "⌘" : "Ctrl"}+Enterでコピー / Escで閉じる
+      </p>
       <RecipeFilters
         search={false}
         value={filter}
@@ -186,17 +208,19 @@ export function Palette({
             </button>
           ))}
           {!filtered.length && (
-            <p className="muted">該当するレシピはありません。</p>
+            <p className="muted">{ui.noPrompts}</p>
           )}
         </div>
       )}
+      <label><input type="checkbox" checked={closeAfterCopy} onChange={e=>{setCloseAfterCopy(e.target.checked);localStorage.setItem("palette-close-after-copy",String(e.target.checked));}} />コピー後に小窓を閉じる</label>
       <Composer
+        standalone
         project={project}
         ids={ids}
         values={values}
         setValues={setValues}
         notice={notice}
-        onCopied={close}
+        onCopied={() => {setPreviousIds(ids);previousValues.current=values;if(closeAfterCopy)close();}}
         focusToken={focusToken}
       />
     </div>

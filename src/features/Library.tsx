@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { ui } from "../i18n";
+import { createSelectionState, selectionReducer, reorderSelection, previewIds } from "../selection";
+import { useEffect, useState, useReducer } from "react";
 import { message, request } from "../api";
-import type { Constraint, Recipe, Snapshot } from "../types";
+import type { Constraint, Recipe, Snapshot, Project } from "../types";
 import { discover, emptyFilter } from "../discovery";
 import { ClassificationEditor, RecipeFilters } from "./RecipeFilters";
 import { Sets } from "./Sets";
@@ -28,17 +30,14 @@ export function Library({
   refresh: () => Promise<void>;
   notice: (s: string) => void;
 }) {
-  const [ids, setIds] = useState<string[]>(
-    snapshot.recipes.find((r) => !r.builtin)
-      ? [snapshot.recipes.find((r) => !r.builtin)!.revision_id]
-      : [],
-  );
+  const [selection, dispatchSelection] = useReducer(selectionReducer, snapshot.recipes.find(r=>!r.builtin)?.revision_id || "", createSelectionState);
+  const { checked: ids, focused: selected, previewSet } = selection;
+  const setIds = (update: string[] | ((current: string[]) => string[])) => dispatchSelection({type:"checked",update});
+  const setSelected = (id: string) => dispatchSelection({type:"focus",id});
+  const setPreviewSet = (set: boolean) => dispatchSelection({type:"preview",set});
   const [builtin, setBuiltin] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState(emptyFilter);
-  const [selected, setSelected] = useState(
-    snapshot.recipes.find((r) => !r.builtin)?.revision_id || "",
-  );
   const [edit, setEdit] = useState<{
     recipe_id: string | null;
     expected_revision: string | null;
@@ -50,6 +49,7 @@ export function Library({
     actions: string[];
     goals: string[];
   } | null>(null);
+  const [adoption, setAdoption] = useState<{recipe:Recipe;projects:Project[]} | null>(null);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState<{
     catalog: {
@@ -81,6 +81,9 @@ export function Library({
     snapshot.recipes.filter((r) => r.builtin === builtin),
     filter,
   );
+  const selectedRecipes = ids
+    .map((id) => snapshot.revisions.find((r) => r.recipe.revision_id === id)?.recipe)
+    .filter((r): r is Recipe => Boolean(r));
   function start(r?: Recipe) {
     setEdit({
       recipe_id: r && !r.builtin ? r.id : null,
@@ -169,12 +172,41 @@ export function Library({
         <section className="panel">
           <div className="filter-chips">
             <button aria-pressed={!builtin} onClick={() => setBuiltin(false)}>
-              自分の台帳
+              自分の台帳{selectedRecipes.filter((r) => !r.builtin).length ? ` (${selectedRecipes.filter((r) => !r.builtin).length})` : ""}
             </button>
             <button aria-pressed={builtin} onClick={() => setBuiltin(true)}>
-              組み込み教材
+              {ui.samples}{selectedRecipes.some((r) => r.builtin) ? ` (${selectedRecipes.filter((r) => r.builtin).length})` : ""}
             </button>
           </div>
+          <section className="selected-recipes" aria-label="選択中のプロンプト">
+            <strong>選択中のプロンプト ({selectedRecipes.length})</strong>
+            {selectedRecipes.length ? (
+              <ul>
+                {selectedRecipes.map((r) => (
+                  <li key={r.revision_id}>
+                    <span>{r.name}</span>
+                    <button type="button" aria-label={`${r.name}を上へ移動`} disabled={ids.indexOf(r.revision_id) === 0} onClick={() => setIds(current => reorderSelection(current, r.revision_id, -1))}>↑</button>
+                    <button type="button" aria-label={`${r.name}を下へ移動`} disabled={ids.indexOf(r.revision_id) === ids.length - 1} onClick={() => setIds(current => reorderSelection(current, r.revision_id, 1))}>↓</button>
+                    <button type="button" aria-label={`${r.name}を選択から外す`} onClick={() => setIds((current) => current.filter((id) => id !== r.revision_id))}>×</button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted">セットに追加するプロンプトを選んでください。</p>}
+          </section>
+          <details><summary>セットを保存・選択</summary>
+          <Sets
+            snapshot={snapshot}
+            ids={ids}
+            apply={(v) => {
+              setIds(v);
+              setSelected(v[0] || "");
+              setPreviewSet(true);
+              setValues({});
+            }}
+            refresh={refresh}
+            notice={notice}
+          />
+          </details>
           <RecipeFilters value={filter} onChange={setFilter} />
           <p role="status" className="muted">
             候補 {filtered.length}本 · 詳細の表示は保持します
@@ -193,6 +225,7 @@ export function Library({
                         : ids.filter((id) => id !== r.revision_id),
                     );
                     if (!selected) setSelected(r.revision_id);
+                    setPreviewSet(false);
                   }}
                 />
                 <button
@@ -203,14 +236,12 @@ export function Library({
                   key={r.id}
                   onClick={() => {
                     setSelected(r.revision_id);
-                    setIds([r.revision_id]);
-                    setValues({});
                   }}
                 >
                   <strong>{r.name}</strong>
                   <span>{r.description}</span>
                   <small>
-                    {r.builtin ? "教材候補" : "自分のレシピ"} · v{r.version}
+                    {r.builtin ? "サンプル" : "自分のプロンプト"} · v{r.version}
                   </small>
                 </button>
               </div>
@@ -218,29 +249,18 @@ export function Library({
             {!filtered.length && (
               <p className="muted">
                 {builtin
-                  ? "該当する教材はありません。"
-                  : "プロンプトを登録するか、組み込み教材から自分用に取り込めます。"}
+                  ? ui.noSamples
+                  : <><button onClick={()=>start()}>最初の1本を登録</button><button className="text-button" onClick={()=>setBuiltin(true)}>サンプルから始める</button></>}
               </p>
             )}
           </div>
         </section>
         <div>
-          <Sets
-            snapshot={snapshot}
-            ids={ids}
-            apply={(v) => {
-              setIds(v);
-              setSelected(v[0] || "");
-              setValues({});
-            }}
-            refresh={refresh}
-            notice={notice}
-          />
           {recipe && (
             <>
-              <LessonView recipe={recipe} />
-              <LintPanel text={recipe.body} />
+              <details><summary>使い方・実例・限界</summary><LessonView recipe={recipe} /></details>
 
+              <div className="panel" aria-label="プレビュー対象"><div className="actions"><button aria-pressed={!previewSet} onClick={()=>setPreviewSet(false)}>表示中の1本</button><button aria-pressed={previewSet} disabled={!ids.length} onClick={()=>setPreviewSet(true)}>チェックした{ids.length}本をプレビュー</button></div><p role="status">{previewSet ? `プレビュー対象：チェックした${ids.length}本のセット` : `プレビュー対象：${recipe.name} · v${recipe.version}`}</p></div>
               <Composer
                 standalone
                 project={{
@@ -251,7 +271,7 @@ export function Library({
                   assignment: [],
                   version: 1,
                 }}
-                ids={ids}
+                ids={previewIds(selection)}
                 values={values}
                 setValues={setValues}
                 notice={notice}
@@ -269,7 +289,7 @@ export function Library({
                       const saved = await downloadPack(pack);
                       notice(
                         saved
-                          ? "レシピをExportしました。"
+                          ? ui.promptExported
                           : "Exportをキャンセルしました。",
                       );
                     } catch (e) {
@@ -290,8 +310,7 @@ export function Library({
                       key={r.recipe.revision_id}
                       onClick={() => {
                         setSelected(r.recipe.revision_id);
-                        setIds([r.recipe.revision_id]);
-                        setValues({});
+                        setPreviewSet(false);
                       }}
                     >
                       v{r.recipe.version} · {r.reason}
@@ -313,7 +332,7 @@ export function Library({
           >
             <h2>導入する版を確認</h2>
             <p className="hint">
-              ローカルのJSONだけを読みます。プロジェクトの割当は現在の版に固定したままです。教材の根拠はレシピで確認できます。
+              {ui.importLocalHelp}
             </p>
             {importing.plan.changes.map((c, i) => (
               <p key={i}>
@@ -331,7 +350,7 @@ export function Library({
                 <summary>{r.name}の本文を確認</summary>
                 <pre>{r.body}</pre>
                 <p className="hint">
-                  {r.lesson?.evidence || "個人レシピ・効果未検証"}
+                  {r.lesson?.evidence || ui.personalUnverified}
                 </p>
               </details>
             ))}
@@ -378,6 +397,7 @@ export function Library({
           </section>
         </div>
       )}
+      {adoption && <section className="panel"><h2>プロジェクトで使う版</h2>{adoption.projects.map(p=><p key={p.id}>{p.name} は旧版を使っています。<button onClick={async()=>{try {await request("save_project",{project:{...p,assignment:p.assignment.map(id=>snapshot.revisions.some(v=>v.recipe.revision_id===id && v.recipe.id===adoption.recipe.id)?adoption.recipe.revision_id:id)},expected_version:p.version});await refresh();setAdoption(null);notice("採用する版を切り替えました。");}catch(e){notice(message(e));}}}>新しい版に切り替える</button></p>)}<button onClick={()=>setAdoption(null)}>旧版を使い続ける</button></section>}
       {edit && (
         <div className="modal-backdrop">
           <section
@@ -405,25 +425,24 @@ export function Library({
               }
             }}
           >
-            <h2 id="editor-title">自分のレシピを保存</h2>
-            <p className="muted">
-              旧版とプロジェクトの割当は保持します。構造化制約は本文と対応させてください。
-            </p>
+            <h2 id="editor-title">{edit.recipe_id ? "プロンプトを編集" : "プロンプトを登録"}</h2>
+            {edit.recipe_id && <p className="muted">新しい版として保存します。旧版とプロジェクトの割当は保持されます。</p>}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
                 try {
-                  const r = await request<Recipe>("save_recipe", edit);
+                  const payload = { ...edit, reason: edit.recipe_id ? (edit.reason.trim() || "更新") : "新規登録" };
+                  const r = await request<Recipe>("save_recipe", payload);
+                  const projects=edit.recipe_id ? snapshot.projects.filter(p=>p.assignment.some(id=>snapshot.revisions.some(v=>v.recipe.revision_id===id && v.recipe.id===r.id))) : [];
+                  if(projects.length)setAdoption({recipe:r,projects});
                   await refresh();
                   setSelected(r.revision_id);
-                  setIds([r.revision_id]);
+                  setPreviewSet(false);
                   setBuiltin(false);
                   setValues({});
                   setEdit(null);
-                  notice(
-                    "新版を保存しました。プロジェクトで採用する版を選んでください。",
-                  );
+                  notice(edit.recipe_id ? "新しい版を保存しました。" : "保存しました。");
                 } catch (err) {
                   notice(message(err));
                 } finally {
@@ -440,7 +459,7 @@ export function Library({
                   onChange={(e) => setEdit({ ...edit, name: e.target.value })}
                 />
               </label>
-              <label>
+              {edit.recipe_id && <label>
                 説明
                 <input
                   value={edit.description}
@@ -448,7 +467,7 @@ export function Library({
                     setEdit({ ...edit, description: e.target.value })
                   }
                 />
-              </label>
+              </label>}
               <label>
                 本文
                 <textarea
@@ -459,12 +478,14 @@ export function Library({
                   onChange={(e) => setEdit({ ...edit, body: e.target.value })}
                 />
               </label>
-              <LintPanel text={edit.body} />
-              <ClassificationEditor
+              <details className="advanced-settings">
+                <summary>詳細設定（Lint・分類・構造化制約）</summary>
+                <LintPanel text={edit.body} />
+                <ClassificationEditor
                 actions={edit.actions}
                 goals={edit.goals}
                 onChange={(patch) => setEdit({ ...edit, ...patch })}
-              />
+                />
               <fieldset>
                 <legend>構造化制約（指定した項目のみ検査）</legend>
                 {keys.map((key, i) => (
@@ -494,18 +515,18 @@ export function Library({
                   </label>
                 ))}
               </fieldset>
-              <details>
+              {edit.recipe_id && <details>
                 <summary>変更理由（任意で調整）</summary>
                 <label>
                   変更理由
                   <input
-                    required
                     value={edit.reason}
                     onChange={(e) =>
                       setEdit({ ...edit, reason: e.target.value })
                     }
                   />
                 </label>
+              </details>}
               </details>
               <div className="actions">
                 <button
@@ -516,7 +537,7 @@ export function Library({
                   キャンセル
                 </button>
                 <button className="primary" disabled={busy}>
-                  {busy ? "保存中…" : "新版を保存"}
+                  {busy ? "保存中…" : edit.recipe_id ? "新しい版として保存" : "保存"}
                 </button>
               </div>
             </form>

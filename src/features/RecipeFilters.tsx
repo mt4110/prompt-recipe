@@ -1,3 +1,4 @@
+import { ui } from "../i18n";
 import { actions, goals, emptyFilter, type Filter } from "../discovery";
 
 export function RecipeFilters({
@@ -14,7 +15,7 @@ export function RecipeFilters({
       {search && (
         <input
           type="search"
-          aria-label="レシピを絞る"
+          aria-label={ui.filterPrompts}
           placeholder="名前・目的・領域で検索"
           value={value.query}
           onChange={(e) => onChange({ ...value, query: e.target.value })}

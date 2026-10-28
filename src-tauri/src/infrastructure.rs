@@ -13,6 +13,9 @@ pub struct Store {
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         let mut connection = Connection::open(path).map_err(application::storage_error)?;
+        connection
+            .busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(application::storage_error)?;
         application::initialize(&mut connection)?;
         let (sender, receiver) = sync_channel::<Job>(32);
         std::thread::Builder::new()

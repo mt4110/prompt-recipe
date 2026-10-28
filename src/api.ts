@@ -1,3 +1,4 @@
+import { ui } from "./i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Composition } from "./types";
@@ -20,38 +21,67 @@ export async function request<T>(kind: string, data?: unknown): Promise<T> {
 }
 export const message = (e: unknown) =>
   typeof e === "object" && e && "message" in e ? String(e.message) : String(e);
+export class AdvisoryCheckError extends Error {}
+
+async function maskedCopyText(text: string, ignored: string[]): Promise<string> {
+  try { return (await request<{ masked: string }>("check_text", { text, ignored })).masked; }
+  catch (e) { throw new AdvisoryCheckError(message(e)); }
+}
+
 export async function copy(
   composition: Composition,
   project_id: string,
   values: Record<string, string>,
   standalone = false,
-): Promise<string | null> {
+  maskSensitive = false,
+  ignored: string[] = [],
+  includeContext = false,
+  aiFormat = false,
+  draft?: { name: string; body: string },
+): Promise<{ warning: string | null; characters: number }> {
   if (desktop) {
-    const result = await invoke<{ copied: boolean; warning: string | null }>(
+    const result = await invoke<{ copied: boolean; warning: string | null; characters: number }>(
       "copy_prompt",
       {
         request: {
           project_id,
+          draft,
           revision_ids: composition.revision_ids,
           values,
           expected_hash: composition.hash,
           operation_id: crypto.randomUUID(),
           standalone,
+          mask_sensitive: maskSensitive,
+          ignored,
+          include_context: includeContext,
+          ai_format: aiFormat,
         },
       },
     );
-    return result.warning;
+    if(!draft)sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
+    window.dispatchEvent(new Event("prompt-copied"));
+    return { warning: result.warning, characters: result.characters };
   }
-  const fresh = await request<Composition>("compose", {
+  const fresh = await request<Composition>(draft ? "compose_draft" : "compose", draft ? {draft, values} : {
     project_id,
     standalone,
+    include_context: includeContext,
+    ai_format: aiFormat,
     revision_ids: composition.revision_ids,
     values,
   });
   if (fresh.hash !== composition.hash || fresh.blocked)
     throw new Error("内容が変わりました。プレビューを確認してください。");
-  await navigator.clipboard.writeText(fresh.body);
-  return "開発用ブラウザでは利用履歴を記録しません。";
+  // Explicit original copying must not depend on the advisory checker.
+  const output = maskSensitive
+    ? await maskedCopyText(fresh.body, ignored)
+    : fresh.body;
+  await navigator.clipboard.writeText(output);
+  if(!draft)sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
+    window.dispatchEvent(new Event("prompt-copied"));
+  const previewWarning = sessionStorage.getItem("preview-copy-notice-seen") ? null : ui.previewCopyNotice;
+  sessionStorage.setItem("preview-copy-notice-seen", "true");
+  return { warning: previewWarning, characters: [...output].length };
 }
 export async function readMaterial(): Promise<{
   text: string;

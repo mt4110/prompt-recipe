@@ -1,0 +1,38 @@
+[
+  {
+    "id": "creds.aws.access_key_id",
+    "pattern": "\\b(AKIA|ASIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA)[0-9A-Z]{16}\\b"
+  },
+  {
+    "id": "creds.aws.secret_key_config",
+    "pattern": "aws_secret_access_key\\s*=\\s*[\"']?([0-9A-Za-z/+]{40})[\"']?"
+  },
+  {
+    "id": "creds.github.pat.ghp",
+    "pattern": "\\bghp_[0-9A-Za-z]{36}\\b"
+  },
+  {
+    "id": "creds.github.pat.long",
+    "pattern": "\\bgithub_pat_[0-9A-Za-z_]{80,100}\\b"
+  },
+  {
+    "id": "creds.slack.token.legacy",
+    "pattern": "\\bxox[baps]-\\d{10,}-\\d{10,}-[0-9A-Za-z]{24,}\\b"
+  },
+  {
+    "id": "creds.key.private_pem",
+    "pattern": "-----BEGIN (RSA |EC )?PRIVATE KEY-----"
+  },
+  {
+    "id": "pii.jp.phone.mobile",
+    "pattern": "0[789]0[- ]?[0-9]{4}[- ]?[0-9]{4}\\b"
+  },
+  {
+    "id": "pii.jp.phone.landline.keyword",
+    "pattern": "(?:電話|\\bTEL\\b|\\bTel\\b|\\bPhone\\b)[^0-9]{0,12}0[1-9][0-9]{0,3}[- ]?[0-9]{1,4}[- ]?[0-9]{4}"
+  },
+  {
+    "id": "pii.net.email",
+    "pattern": "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}"
+  }
+]

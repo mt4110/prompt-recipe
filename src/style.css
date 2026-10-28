@@ -802,6 +802,32 @@ summary {
   color: #3156bf;
   border-color: #b5c6ff;
 }
+
+.selected-recipes {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+}
+.selected-recipes ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.selected-recipes li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef1f6;
+}
+.selected-recipes li button {
+  padding: 0 3px;
+}
 .classification-check {
   display: inline-flex;
   align-items: center;
@@ -859,3 +885,33 @@ summary {
   flex: 0 0 auto;
   object-fit: contain;
 }
+
+/* Composed views remain available behind focused overlays. */
+.modal-backdrop > .onboarding, .modal-backdrop > .ai-comparison { max-height:90vh; overflow:auto; width:min(960px,94vw); background:#fcfcfd; border-radius:14px; padding:24px; }
+mark { background:#fff1ae; color:#242424; border-radius:2px; }
+.selected-recipes li { max-width:100%; flex-wrap:wrap; }
+.selected-recipes li span { overflow-wrap:anywhere; }
+label:has(> input[type="checkbox"]) { display:flex; align-items:center; gap:8px; }
+input[type="checkbox"] { width:auto; }
+
+@media (max-width: 600px) {
+ .shell { display:block; }
+ .shell > aside { width:auto; padding:8px; border-right:0; border-bottom:1px solid #e6e9ef; }
+ .shell > aside nav { display:flex; flex-wrap:wrap; gap:4px; }
+ .sidebar-note { display:none; }
+ .shell > main { padding:16px; min-width:0; }
+ .page-heading { display:block; }
+ .page-heading > .actions { margin-top:12px; flex-wrap:wrap; }
+ .page-heading h1 { overflow-wrap:normal; }
+ .columns > * { min-width:0; }
+ header { height:auto; min-height:62px; flex-wrap:wrap; gap:8px; padding:12px; }
+ header .actions { flex-wrap:wrap; }
+ .toast { width:calc(100vw - 32px); max-width:600px; }
+}
+
+.advisory-findings { display:grid; gap:8px; padding:0; list-style:none; }
+.advisory-findings li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border:1px solid #e6e9ef; border-radius:8px; padding:8px 12px; }
+
+.advisory-review { margin:16px 0; padding:12px 16px; border:1px solid #e9ce74; border-radius:10px; background:#fffcf0; }
+.advisory-review h3 { margin:0 0 8px; }
+.advisory-review .advisory-findings { margin-bottom:0; }

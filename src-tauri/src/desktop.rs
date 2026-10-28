@@ -1,7 +1,6 @@
 use crate::{application, domain::*, infrastructure::Store};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, sync::Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -48,7 +47,17 @@ async fn dispatch(
 #[serde(deny_unknown_fields)]
 struct CopyRequest {
     #[serde(default)]
+    draft: Option<application::DraftPrompt>,
+    #[serde(default)]
     standalone: bool,
+    #[serde(default)]
+    mask_sensitive: bool,
+    #[serde(default)]
+    include_context: bool,
+    #[serde(default)]
+    ai_format: bool,
+    #[serde(default)]
+    ignored: Vec<String>,
     project_id: String,
     revision_ids: Vec<String>,
     values: BTreeMap<String, String>,
@@ -64,7 +73,6 @@ async fn copy_prompt(
     authorized(&window)?;
     uuid::Uuid::parse_str(&request.operation_id)
         .map_err(|_| Error::new("operation", "コピー操作のIDが不正です。"))?;
-    let label = window.label().to_owned();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<State>();
         let _lock = state
@@ -72,17 +80,20 @@ async fn copy_prompt(
             .lock()
             .map_err(|_| Error::new("copy", "コピーを再試行してください。"))?;
         let ids = request.revision_ids.clone();
+        let record_usage = request.draft.is_none();
         let composed = state.store.call(move |conn| {
-            if request.standalone {
-                application::ledger_composition(conn, &request.revision_ids, &request.values)
-            } else {
-                application::composition(
-                    conn,
-                    &request.project_id,
-                    &request.revision_ids,
-                    &request.values,
-                )
+            if let Some(draft) = request.draft {
+                return application::draft_composition(&draft, &request.values);
             }
+            application::output_composition(
+                conn,
+                &request.project_id,
+                &request.revision_ids,
+                &request.values,
+                request.standalone,
+                request.include_context,
+                request.ai_format,
+            )
         })?;
         if composed.blocked || composed.revision_ids.is_empty() {
             return Err(Error::new(
@@ -96,28 +107,27 @@ async fn copy_prompt(
                 "プレビューが変わりました。内容を確認して再試行してください。",
             ));
         }
-        app.clipboard().write_text(&composed.body).map_err(|_| {
+        let output =
+            crate::advisory::copy_text(&composed.body, request.mask_sensitive, &request.ignored);
+        app.clipboard().write_text(&output).map_err(|_| {
             Error::new(
                 "clipboard",
                 "コピーできませんでした。入力は保持されています。",
             )
         })?;
         if let Ok(mut last) = state.last_output_hash.lock() {
-            *last = Some(format!("{:x}", Sha256::digest(composed.body.as_bytes())));
+            *last = Some(crate::hash::sha256(output.as_bytes()));
         }
-        let warning = state
-            .store
-            .call(move |conn| application::record_use(conn, &request.operation_id, &ids))
-            .err()
-            .map(|_| "コピー済みですが利用記録を保存できませんでした。");
-        if label == "palette" {
-            if let Some(w) = app.get_webview_window("palette") {
-                w.hide().map_err(|_| {
-                    Error::new("window", "コピー済みですが小窓を閉じられませんでした。")
-                })?;
-            }
-        }
-        Ok(json!({"copied":true,"warning":warning}))
+        let warning = if record_usage {
+            state
+                .store
+                .call(move |conn| application::record_use(conn, &request.operation_id, &ids))
+                .err()
+                .map(|_| "コピー済みですが利用記録を保存できませんでした。")
+        } else {
+            None
+        };
+        Ok(json!({"copied":true,"warning":warning,"characters":output.chars().count()}))
     })
     .await
     .map_err(|_| Error::new("worker", "コピー処理が停止しました。"))?
@@ -222,7 +232,7 @@ fn read_material(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<
         .last_output_hash
         .lock()
         .map_err(|_| Error::new("clipboard", "コピー状態を取得できません。"))?;
-    let digest = format!("{:x}", Sha256::digest(text.as_bytes()));
+    let digest = crate::hash::sha256(text.as_bytes());
     Ok(json!({"text":text,"is_previous_output":previous.as_ref()==Some(&digest)}))
 }
 #[tauri::command]
@@ -294,6 +304,7 @@ async fn open_repository(
 }
 pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
