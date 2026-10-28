@@ -9,6 +9,7 @@ pub struct Finding {
     pub start: usize,
     pub end: usize,
     pub fingerprint: String,
+    pub fingerprints: Vec<String>,
 }
 #[derive(Deserialize)]
 struct Rule {
@@ -97,40 +98,102 @@ fn numeric_context(rule: &str, text: &str, start: usize, end: usize) -> bool {
                 .iter()
                 .any(|word| line.contains(word));
     }
-    ["カード", "クレジット", "credit", "card", "pan", "cc_number"]
-        .iter()
-        .any(|word| line.contains(word))
+    static CARD_LABEL: OnceLock<Regex> = OnceLock::new();
+    CARD_LABEL.get_or_init(|| Regex::new(r"(?i)(?:カード(?:番号)?|クレジット(?:カード)?|\bcredit(?:[_ -]?card)?|\bcard(?:[_ -]?(?:number|no))?|\bpan|\bcc_number)\s*[:=：]?\s*$").expect("card label"))
+        .is_match(&text[line_start..start])
 }
-pub fn inspect(text: &str) -> Vec<Finding> {
+fn candidates(text: &str) -> Vec<Finding> {
+    static PHONE_NUMBER: OnceLock<Regex> = OnceLock::new();
+    let number = PHONE_NUMBER
+        .get_or_init(|| Regex::new(r"(?:\+81[- ]?|0)[0-9][0-9 -]*[0-9]").expect("number"));
     let mut findings = Vec::new();
     for (id, regex) in rules() {
         for m in regex.find_iter(text) {
-            if valid(id, m.as_str()) && numeric_context(id, text, m.start(), m.end()) {
+            let (mut start, mut end) = (m.start(), m.end());
+            if id.contains("phone") {
+                if let Some(n) = number.find(m.as_str()) {
+                    start += n.start();
+                    end = m.start() + n.end();
+                }
+            }
+            if id == "creds.key.private_pem" {
+                end = text[start..]
+                    .find("-----END ")
+                    .and_then(|i| {
+                        text[start + i + 9..]
+                            .find("-----")
+                            .map(|j| start + i + 9 + j + 5)
+                    })
+                    .unwrap_or(text.len());
+            }
+            if valid(id, &text[start..end]) && numeric_context(id, text, start, end) {
                 findings.push(Finding {
                     rule: id.clone(),
-                    start: m.start(),
-                    end: m.end(),
+                    start,
+                    end,
+                    fingerprints: vec![],
                     fingerprint: format!(
                         "{:x}",
-                        Sha256::digest(format!("{}:{}", id, m.as_str()).as_bytes())
+                        Sha256::digest(format!("{}:{}", id, &text[start..end]).as_bytes())
                     ),
                 });
             }
         }
     }
     findings.sort_by_key(|f| (f.start, std::cmp::Reverse(f.end)));
+    findings
+}
+fn merge_findings(text: &str, findings: Vec<Finding>) -> Vec<Finding> {
     // Merge overlapping findings before masking; no byte-range shifts or partial key leaks.
     let mut merged: Vec<Finding> = Vec::new();
-    for f in findings {
+    for mut f in findings {
+        f.fingerprints.push(f.fingerprint.clone());
         if let Some(last) = merged.last_mut() {
             if f.start < last.end {
                 last.end = last.end.max(f.end);
+                last.fingerprints.extend(f.fingerprints);
                 continue;
             }
         }
         merged.push(f);
     }
+    for f in &mut merged {
+        f.fingerprints.sort();
+        f.fingerprints.dedup();
+        f.fingerprint = format!(
+            "{:x}",
+            Sha256::digest(format!("merged:{}", &text[f.start..f.end]).as_bytes())
+        );
+    }
     merged
+}
+pub fn inspect(text: &str) -> Vec<Finding> {
+    merge_findings(text, candidates(text))
+}
+pub fn inspect_ignoring(text: &str, ignored: &[String]) -> Vec<Finding> {
+    let raw = candidates(text);
+    let groups = merge_findings(text, raw.clone());
+    let ignored_groups: Vec<_> = groups
+        .iter()
+        .filter(|f| ignored.contains(&f.fingerprint))
+        .collect();
+    let remaining = raw
+        .into_iter()
+        .filter(|f| {
+            !ignored.contains(&f.fingerprint)
+                && !ignored_groups
+                    .iter()
+                    .any(|g| g.start <= f.start && g.end >= f.end)
+        })
+        .collect();
+    merge_findings(text, remaining)
+}
+pub fn copy_text(text: &str, masked: bool, ignored: &[String]) -> String {
+    if masked {
+        mask(text, &inspect_ignoring(text, ignored))
+    } else {
+        text.to_owned()
+    }
 }
 pub fn mask(text: &str, findings: &[Finding]) -> String {
     let mut output = text.to_owned();
@@ -255,5 +318,81 @@ mod regression {
             found.len()
         );
         assert_eq!(found.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod round_three {
+    use super::*;
+    #[test]
+    fn masks_only_the_phone_number_and_preserves_surrounding_text() {
+        for (input, expected) in [
+            ("電話: 0312345678", "電話: [MASKED]"),
+            ("TEL: 03-1234-5678", "TEL: [MASKED]"),
+            ("日本語 電話 03-1234-5678 です", "日本語 電話 [MASKED] です"),
+        ] {
+            assert_eq!(copy_text(input, true, &[]), expected);
+        }
+    }
+    #[test]
+    fn overlap_ignores_preserve_other_rules_and_group_ignore_is_explicit() {
+        let input = "API_TOKEN=dummy@example.test";
+        let found = inspect(input);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].fingerprints.len() >= 2);
+        for fingerprint in &found[0].fingerprints {
+            let remaining = inspect_ignoring(input, std::slice::from_ref(fingerprint));
+            assert!(remaining
+                .iter()
+                .all(|f| !f.fingerprints.contains(fingerprint)));
+            assert_eq!(
+                copy_text(input, true, std::slice::from_ref(fingerprint)),
+                "[MASKED]"
+            );
+        }
+        assert_eq!(
+            copy_text(input, true, std::slice::from_ref(&found[0].fingerprint)),
+            input
+        );
+        assert_eq!(copy_text(input, true, &[]), "[MASKED]");
+    }
+    #[test]
+    fn id_and_timestamp_labels_are_not_card_context_for_any_luhn_length() {
+        for len in 13..=19 {
+            let base = format!("17{}", "0".repeat(len - 3));
+            let number = (0..=9)
+                .map(|d| format!("{base}{d}"))
+                .find(|n| valid("credit-card", n))
+                .expect("valid checksum");
+            for label in [
+                "ID: ",
+                "timestamp: ",
+                "span ID: ",
+                "company ID: ",
+                "カード情報の説明 ID: ",
+            ] {
+                assert!(
+                    inspect(&format!("{label}{number}")).is_empty(),
+                    "{label}{number}"
+                );
+            }
+            assert!(!inspect(&format!("カード番号: {number}")).is_empty());
+        }
+    }
+    #[test]
+    fn final_copy_string_retains_none_of_the_original_dummy_values() {
+        let input="電話: 0312345678\nカード番号: 4111111111111111\nAPI_TOKEN=dummy@example.test\n日本語 sk-abcdefghijklmnopqrstuvwx";
+        let output = copy_text(input, true, &[]);
+        for secret in [
+            "0312345678",
+            "4111111111111111",
+            "dummy@example.test",
+            "sk-abcdefghijklmnopqrstuvwx",
+        ] {
+            assert!(!output.contains(secret));
+        }
+        assert!(output.contains("電話:"));
+        assert!(output.contains("カード番号:"));
+        assert_eq!(copy_text(input, false, &[]), input);
     }
 }

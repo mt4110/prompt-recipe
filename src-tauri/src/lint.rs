@@ -100,7 +100,7 @@ pub fn check(text: &str, format: &str) -> Result<Vec<Issue>> {
             let trimmed = line.trim_start();
             let marker = trimmed.as_bytes().first().copied().unwrap_or(0);
             let count = trimmed.bytes().take_while(|b| *b == marker).count();
-            if [b'`', b'~'].contains(&marker) && count >= 3 {
+            if b"`~".contains(&marker) && count >= 3 {
                 if let Some((m, n, _)) = fence {
                     if marker == m && count >= n && trimmed[count..].trim().is_empty() {
                         fence = None;

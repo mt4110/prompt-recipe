@@ -108,15 +108,8 @@ async fn copy_prompt(
                 "プレビューが変わりました。内容を確認して再試行してください。",
             ));
         }
-        let output = if request.mask_sensitive {
-            let findings: Vec<_> = crate::advisory::inspect(&composed.body)
-                .into_iter()
-                .filter(|f| !request.ignored.contains(&f.fingerprint))
-                .collect();
-            crate::advisory::mask(&composed.body, &findings)
-        } else {
-            composed.body.clone()
-        };
+        let output =
+            crate::advisory::copy_text(&composed.body, request.mask_sensitive, &request.ignored);
         app.clipboard().write_text(&output).map_err(|_| {
             Error::new(
                 "clipboard",
@@ -312,6 +305,7 @@ async fn open_repository(
 }
 pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(

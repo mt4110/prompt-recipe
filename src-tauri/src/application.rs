@@ -499,10 +499,7 @@ pub fn dispatch(conn: &mut Connection, request: Request) -> Result<Value> {
                     "無視する検出は512件以内で指定してください。",
                 ));
             }
-            let findings: Vec<_> = crate::advisory::inspect(&text)
-                .into_iter()
-                .filter(|f| !ignored.contains(&f.fingerprint))
-                .collect();
+            let findings = crate::advisory::inspect_ignoring(&text, &ignored);
             Ok(json!({"masked":crate::advisory::mask(&text,&findings),"findings":findings}))
         }
         Request::SaveSet {
@@ -983,7 +980,7 @@ mod tests {
         assert_eq!(stored, bytes);
         assert_eq!(
             project(&c, "personal").expect("project").assignment,
-            [old.revision_id.clone()]
+            std::slice::from_ref(&old.revision_id)
         );
         let snap = dispatch(&mut c, Request::Snapshot).expect("snapshot");
         assert_eq!(snap["recipes"].as_array().expect("recipes").len(), 13);
