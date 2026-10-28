@@ -20,6 +20,13 @@ export async function request<T>(kind: string, data?: unknown): Promise<T> {
 }
 export const message = (e: unknown) =>
   typeof e === "object" && e && "message" in e ? String(e.message) : String(e);
+export class AdvisoryCheckError extends Error {}
+
+async function maskedCopyText(text: string, ignored: string[]): Promise<string> {
+  try { return (await request<{ masked: string }>("check_text", { text, ignored })).masked; }
+  catch (e) { throw new AdvisoryCheckError(message(e)); }
+}
+
 export async function copy(
   composition: Composition,
   project_id: string,
@@ -62,8 +69,10 @@ export async function copy(
   });
   if (fresh.hash !== composition.hash || fresh.blocked)
     throw new Error("内容が変わりました。プレビューを確認してください。");
-  const inspected = await request<{ masked: string }>("check_text", { text: fresh.body, ignored });
-  const output = maskSensitive ? inspected.masked : fresh.body;
+  // Explicit original copying must not depend on the advisory checker.
+  const output = maskSensitive
+    ? await maskedCopyText(fresh.body, ignored)
+    : fresh.body;
   await navigator.clipboard.writeText(output);
   sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
     window.dispatchEvent(new Event("prompt-copied"));

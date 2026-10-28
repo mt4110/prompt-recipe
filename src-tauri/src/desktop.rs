@@ -102,11 +102,11 @@ async fn copy_prompt(
                 "プレビューが変わりました。内容を確認して再試行してください。",
             ));
         }
-        let findings: Vec<_> = crate::advisory::inspect(&composed.body)
-            .into_iter()
-            .filter(|f| !request.ignored.contains(&f.fingerprint))
-            .collect();
         let output = if request.mask_sensitive {
+            let findings: Vec<_> = crate::advisory::inspect(&composed.body)
+                .into_iter()
+                .filter(|f| !request.ignored.contains(&f.fingerprint))
+                .collect();
             crate::advisory::mask(&composed.body, &findings)
         } else {
             composed.body.clone()

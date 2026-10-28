@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { copySuccess, copyFailure } from "../copyMessages";
 import { LintPanel } from "./LintPanel";
-import { copy, message, readMaterial, request } from "../api";
+import { AdvisoryCheckError, copy, message, readMaterial, request } from "../api";
 import type { Composition, Project, Recipe } from "../types";
 
 export function Composer({
@@ -114,23 +114,30 @@ export function Composer({
     target?.focus();
   }, [pending, result, focusToken, ids]);
   const [inspection, setInspection] = useState<{body:string; masked:string; findings:{rule:string;start:number;end:number;fingerprint:string}[]} | null>(null);
+  const [inspectionFailure, setInspectionFailure] = useState<{body:string;message:string} | null>(null);
+  const inspectionFailed = !!result && inspectionFailure?.body === result.body;
   const activeFindings = inspection?.findings.filter((f) => !ignored.includes(`${scope}:${f.fingerprint}`)) || [];
   useEffect(() => {
-    let active=true; setInspection(null);
+    let active=true; setInspection(null); setInspectionFailure(null);
     if (!result) return;
     const body=result.body;
-    const timer=setTimeout(() => { void request<{masked:string;findings:{rule:string;start:number;end:number;fingerprint:string}[]}>("check_text",{text:body}).then((r)=>{if(active)setInspection({...r,body});}).catch((e)=>{if(active){setInspection(null);setError(`検査を完了できませんでした。${message(e)}`);}}); },120);
+    const timer=setTimeout(() => { void request<{masked:string;findings:{rule:string;start:number;end:number;fingerprint:string}[]}>("check_text",{text:body}).then((r)=>{if(active)setInspection({...r,body});}).catch((e)=>{if(active){setInspection(null);setInspectionFailure({body,message:message(e)});}}); },120);
     return ()=>{active=false;clearTimeout(timer);};
   },[result]);
   async function doCopy(maskSensitive = true) {
-    if (!result || copying || pending || result.blocked || !ids.length || resolvedKey.current!==inputKey || inspection?.body!==result.body) return;
+    if (!result || copying || pending || result.blocked || !ids.length || resolvedKey.current!==inputKey || (inspection?.body!==result.body && !inspectionFailed)) return;
     setCopying(true);
     try {
-      const copied = await copy(result, project.id, values, standalone, maskSensitive, ignored.filter((v) => v.startsWith(`${scope}:`)).map((v) => v.slice(scope.length + 1)), includeContext, aiFormat);
+      const copied = await copy(result, project.id, values, standalone, maskSensitive && !inspectionFailed, ignored.filter((v) => v.startsWith(`${scope}:`)).map((v) => v.slice(scope.length + 1)), includeContext, aiFormat);
       notice(copySuccess(copied.characters, copied.warning));
       onCopied?.();
     } catch (e) {
-      notice(copyFailure(message(e)));
+      if (e instanceof AdvisoryCheckError) {
+        setInspectionFailure({body: result.body, message: message(e)});
+        notice("秘密情報の検査に失敗しました。未検査でそのままコピーを選べます。");
+      } else {
+        notice(copyFailure(message(e)));
+      }
     } finally {
       setCopying(false);
     }
@@ -222,6 +229,7 @@ export function Composer({
         {pending ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={f.rule}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
       </pre>
       {result && <details><summary>詳細・Lint</summary><LintPanel text={result.body} /><p>自由文の意味検査は行いません。</p></details>}
+      {inspectionFailed && <p role="status" className="hint">秘密情報の検査を完了できませんでした。未検査の本文をそのままコピーできます。{inspectionFailure?.message}</p>}
       {!!activeFindings.length && <p role="status">秘密情報・個人情報らしき文字列 {activeFindings.length}件。コピー前に確認してください。</p>}
       {activeFindings.map((f) => <button className="text-button" key={f.fingerprint} onClick={() => { const next=[...ignored,`${scope}:${f.fingerprint}`]; localStorage.setItem("advisory-ignores",JSON.stringify(next.slice(-512))); setIgnored(next); }}>{f.rule}：このプロンプトでは無視</button>)}
       <div className="footer">
@@ -229,11 +237,11 @@ export function Composer({
         <button
           className="primary"
           disabled={
-            !result || pending || copying || result.blocked || !ids.length || inspection?.body !== result.body
+            !result || pending || copying || result.blocked || !ids.length || (inspection?.body !== result.body && !inspectionFailed)
           }
           onClick={() => void doCopy()}
         >
-          {copying ? "コピー中…" : activeFindings.length ? "マスクしてコピー" : "コピー"} <kbd>{navigator.platform.includes("Mac") ? "⌘Enter" : "Ctrl+Enter"}</kbd>
+          {copying ? "コピー中…" : inspectionFailed ? "未検査でそのままコピー" : activeFindings.length ? "マスクしてコピー" : "コピー"} <kbd>{navigator.platform.includes("Mac") ? "⌘Enter" : "Ctrl+Enter"}</kbd>
         </button>
         {!!activeFindings.length && <button disabled={pending || copying || !result || result.blocked} onClick={() => void doCopy(false)}>そのままコピー</button>}
       </div>
