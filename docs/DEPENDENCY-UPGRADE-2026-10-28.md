@@ -1,6 +1,6 @@
 # 依存更新と移行検証（2026-10-28）
 
-公開レジストリの安定版を基準に、メジャー／0.xの破壊的更新も含めて更新。プレリリースは採用しません。コード・lockfile・Rustツールチェーン・CIを同じ状態へ揃えています。公開・配布・PR作成は実施していません。
+公開レジストリの安定版を基準に、メジャー／0.xの破壊的更新も含めて更新。プレリリースは採用しません。コード・lockfile・Rustツールチェーン・CIを同じ状態へ揃えています。アプリ版は0.2.0へ更新。マージ・署名タグ・リリース公開はこの変更の対象外です。
 
 ## 直接依存
 
@@ -40,11 +40,11 @@ Tauriの3系はalphaで、TypeScriptの7.1系もbeta/nextだったため採用�
 
 - `npm audit`: 更新前high 1件（Viteの複数アドバイザリを集約）→ 更新後0件。
 - `npm outdated --json`: 更新後 `{}`。
-- `cargo audit`: 脆弱性として分類されるものは更新後0件。ただしINFO警告2件が残るため、「Rust監査に問題なし」とは扱いません。
+- `cargo-audit 0.22.2`: 脆弱性0件、警告0件。監査DBのcommitは `99670cfc0bc574433034b75876a4b791ccaa2efb`（2026-10-27更新）。
 - 更新でTokioのINFO unsound警告とyank済みclipboard-win 5.4.1を解消。
-- 残る警告: `glib 0.18.5` の [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html)（INFO unsound、修正版は0.20以上）、`proc-macro-error 1.0.4` の [RUSTSEC-2024-0370](https://rustsec.org/advisories/RUSTSEC-2024-0370.html)（保守終了、修正版なし）。Tauri 2系のGTK/WebKit等のLinux経路から入る依存で、`cargo tree --target all -i` で確認しました。Mac向けの依存木にはglib経路がありません。未検証のGTKメジャー強制更新や監査ignoreで隠していません。
+- 当初残ったGLibの不健全なFFI出力引数と、保守終了したproc-macro-errorを[ローカル修正](SECURITY-PATCHES.md)で解消。警告ignore・バージョン偽装は使用していません。
 
-監査は取得時点のデータベースによる結果です。Linux経路がMacで使われないことは、Linux配布の安全性を保証する意味ではありません。
+cargo-auditはpath依存のソースを検査しません。0件という結果だけを修正の証拠にはせず、配布元・パッチ適用後のSHA-256照合と、最適化したGLib実行テストを併用します。さらに元のレジストリ識別子でも追加監査し、修正対象以外の新規警告があればCIを失敗させます。監査は取得時点のデータベースによる結果です。
 
 ## ローカル検証
 
@@ -53,9 +53,10 @@ Mac ARM64、Node 26.9.0、Rust 1.99.1で以下を確認しました。
 - `npm test`: 14件成功。
 - Rustのno-default-features試験: 49件成功（ライブラリ46件、別の統合試験3件）。
 - Rustfmt、全ターゲットClippy `-D warnings`、TypeScript、フロントビルド、通信境界チェック。
-- `npm run tauri -- build --debug --no-bundle`: Tauri CLI・custom-protocol・デスクトップ実行ファイルのコンパイルとリンクまで成功。
+- `npm run tauri -- build --no-bundle`: release最適化、custom-protocol付きmacOS ARM64デスクトップ実行ファイルのコンパイルとリンクまで成功。
+- `glib-regression`のrelease試験3件: 文字列反復の境界・日本語・空文字・逆方向と、移行後マクロの展開・値の保持を確認。GLibネイティブライブラリ2.90.0を使用。
 - 一時DBと既存ChromeのPlaywright試験: 保存しない案内、明示登録・重複防止、行フォーカスとセットの分離、マスク・明示原文コピー・無視、小窓の再開、電話/カード候補と表示の一致、ブラウザ注意文の初回限定を確認。クリップボードはスタブ、実際のOS操作とは別です。
 
 Lucide 1系の `"use client"` がSPAバンドルでは保存されない旨のMODULE_LEVEL_DIRECTIVE警告が出ます。Server Componentsを使用する構成ではなく、ビルド・画面試験は成功しています。この警告は抑制していません。
 
-Windows/Linuxのビルド・実機、ネイティブのOSクリップボード・グローバルショートカット、署名・notarization、release最適化ビルド、リモートCIは未確認です。
+Windows/Linuxのビルド・実機、ネイティブのOSクリップボード・グローバルショートカット、署名・notarization、リモートCIはローカル検証の対象外です。CIにはLinux上のGLib回帰試験も追加しました。

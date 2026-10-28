@@ -1,6 +1,6 @@
 [package]
 name = "prompt-recipe"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.99"
 default-run = "prompt-recipe"
@@ -38,3 +38,14 @@ tauri-plugin-global-shortcut = { version = "2.4.1", optional = true }
 
 [build-dependencies]
 tauri-build = { version = "2.7.4", optional = true , features = [] }
+
+[patch.crates-io]
+glib = { path = "vendor/glib" }
+glib-macros = { path = "vendor/glib-macros" }
+gtk3-macros = { path = "vendor/gtk3-macros" }
+
+[workspace]
+resolver = "2"
+members = ["security-tests/glib-regression"]
+exclude = ["vendor/glib", "vendor/glib-macros", "vendor/gtk3-macros"]
+default-members = ["."]
