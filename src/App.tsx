@@ -1,3 +1,5 @@
+import { ui } from "./i18n";
+import { isMac } from "./platform";
 import { Activity, useCallback, useEffect, useState } from "react";
 import { BookOpen, Folder, MessageSquare, Search } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -74,7 +76,7 @@ export default function App() {
     return (
       <main className="loading">
         <h1>Prompt Recipe</h1>
-        <p role="status">{error || "レシピを読み込んでいます…"}</p>
+        <p role="status">{error || ui.loadingPrompts}</p>
         {error && <button onClick={() => void refresh()}>再試行</button>}
       </main>
     );
@@ -139,7 +141,7 @@ export default function App() {
               }}
             >
               <Search size={15} />
-              小窓を開く <kbd>{navigator.platform.includes("Mac") ? "⌘⇧Space" : "Ctrl+Shift+Space"}</kbd>
+              小窓を開く <kbd>{isMac() ? "⌘⇧Space" : "Ctrl+Shift+Space"}</kbd>
             </button>
           </div>
         </header>

@@ -1,5 +1,6 @@
+import { isMac } from "../platform";
 import { useEffect, useRef, useState } from "react";
-import { advisoryRuleLabel } from "../i18n";
+import { advisoryRuleLabel, ui } from "../i18n";
 import { copySuccess, copyFailure } from "../copyMessages";
 import { LintPanel } from "./LintPanel";
 import { AdvisoryCheckError, copy, message, readMaterial, request } from "../api";
@@ -116,17 +117,17 @@ export function Composer({
     );
     target?.focus();
   }, [pending, result, focusToken, ids]);
-  const [inspection, setInspection] = useState<{body:string; masked:string; findings:{rule:string;start:number;end:number;fingerprint:string}[]} | null>(null);
+  const [inspection, setInspection] = useState<{body:string; masked:string; findings:{rule:string;start:number;end:number;fingerprint:string;fingerprints:string[]}[]} | null>(null);
   const [inspectionFailure, setInspectionFailure] = useState<{body:string;message:string} | null>(null);
   const inspectionFailed = !!result && inspectionFailure?.body === result.body;
-  const activeFindings = inspection?.findings.filter((f) => !ignored.includes(`${scope}:${f.fingerprint}`)) || [];
+  const activeFindings = inspection?.findings || [];
   useEffect(() => {
     let active=true; setInspection(null); setInspectionFailure(null);
     if (!result) return;
     const body=result.body;
-    const timer=setTimeout(() => { void request<{masked:string;findings:{rule:string;start:number;end:number;fingerprint:string}[]}>("check_text",{text:body}).then((r)=>{if(active)setInspection({...r,body});}).catch((e)=>{if(active){setInspection(null);setInspectionFailure({body,message:message(e)});}}); },120);
+    const timer=setTimeout(() => { void request<{masked:string;findings:{rule:string;start:number;end:number;fingerprint:string;fingerprints:string[]}[]}>("check_text",{text:body,ignored:ignored.filter(v=>v.startsWith(`${scope}:`)).map(v=>v.slice(scope.length+1))}).then((r)=>{if(active)setInspection({...r,body});}).catch((e)=>{if(active){setInspection(null);setInspectionFailure({body,message:message(e)});}}); },120);
     return ()=>{active=false;clearTimeout(timer);};
-  },[result]);
+  },[result,ignored,scope]);
   async function doCopy(maskSensitive = true) {
     if (!result || copying || pending || result.blocked || !ids.length || resolvedKey.current!==inputKey || (inspection?.body!==result.body && !inspectionFailed)) return;
     setCopying(true);
@@ -246,7 +247,7 @@ export function Composer({
           }
           onClick={() => void doCopy()}
         >
-          {copying ? "コピー中…" : inspectionFailed ? "未検査でそのままコピー" : activeFindings.length ? "マスクしてコピー" : "コピー"} <kbd>{navigator.platform.includes("Mac") ? "⌘Enter" : "Ctrl+Enter"}</kbd>
+          {copying ? "コピー中…" : inspectionFailed ? "未検査でそのままコピー" : activeFindings.length ? "マスクしてコピー" : "コピー"} <kbd>{isMac() ? "⌘Enter" : "Ctrl+Enter"}</kbd>
         </button>
         {!!activeFindings.length && <button disabled={pending || copying || !result || result.blocked} onClick={() => void doCopy(false)}>そのままコピー</button>}
       </div>
@@ -294,7 +295,7 @@ export function LessonView({ recipe }: { recipe: Recipe }) {
         </>
       )}
       <details>
-        <summary>レシピ本文・構造化制約</summary>
+        <summary>{ui.promptBodyConstraints}</summary>
         <pre>{recipe.body}</pre>
         <p className="muted">
           {recipe.constraints.map((c) => `${c.key}: ${c.value}`).join(" / ") ||

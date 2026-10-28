@@ -1,3 +1,4 @@
+import { ui } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { message, request } from "../api";
 import type { AiTarget, Snapshot } from "../types";
@@ -251,7 +252,7 @@ export function AiComparison({
         <p className="hint">
           {target.format === "xml"
             ? "ClaudeではXMLによる区分が公式に推奨されています。タグで遵守を保証したり、トークンが減ると保証したりはしません。"
-            : "短い見出しで環境・目的・レシピを区分します。必要な指示だけを渡します。"}{" "}
+            : ui.aiFormatExplanation}{" "}
           保存すると、このプロジェクトの利用環境と出力形式へ反映します。
         </p>
         {error && (
@@ -270,7 +271,7 @@ export function AiComparison({
               ? "保存中…"
               : snapshot.onboarded
                 ? "この選択をプロジェクトに保存"
-                : "このAIでレシピを試す →"}
+                : ui.tryAiPrompt}
           </button>
         </div>
         <details className="ai-sources">

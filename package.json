@@ -12,22 +12,32 @@
     "check": "tsc --noEmit",
     "test:core": "cargo test --manifest-path src-tauri/Cargo.toml --no-default-features",
     "preview:core": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features --bin recipe-preview",
-    "test:discovery": "node --experimental-strip-types --test scripts/discovery.test.ts",
-    "test:copy-messages": "node --experimental-strip-types --test scripts/copy-messages.test.ts",
-    "check:boundary": "node scripts/check-local-boundary.mjs"
+    "test:discovery": "node scripts/run-tests.mjs scripts/discovery.test.ts",
+    "test:copy-messages": "node scripts/run-tests.mjs scripts/copy-messages.test.ts",
+    "check:boundary": "node scripts/check-local-boundary.mjs",
+    "test:frontend": "node scripts/run-tests.mjs scripts/selection.test.ts scripts/node-version.test.mjs",
+    "preinstall": "node scripts/check-node.mjs",
+    "predev": "node scripts/check-node.mjs",
+    "prebuild": "node scripts/check-node.mjs",
+    "precheck": "node scripts/check-node.mjs",
+    "test": "node scripts/run-tests.mjs scripts/discovery.test.ts scripts/copy-messages.test.ts scripts/selection.test.ts scripts/node-version.test.mjs"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
     "@tauri-apps/api": "2.12.1",
-    "lucide-react": "^0.577.0"
+    "@tauri-apps/plugin-os": "2.4.0",
+    "lucide-react": "^0.577.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.1",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/node": "^26",
     "typescript": "7.0.2",
     "vite": "8.3.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

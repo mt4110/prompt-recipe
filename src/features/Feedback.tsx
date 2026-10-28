@@ -1,3 +1,4 @@
+import { ui } from "../i18n";
 import { useEffect, useState } from "react";
 import { message, request } from "../api";
 import type { Snapshot } from "../types";
@@ -119,7 +120,7 @@ export function FeedbackView({
             </article>
           ))}
           <p className="hint">
-            修正は「レシピ」で新版を作り、プロジェクトで採用します。追加だけでなく短縮・条件付け・分割も検討してください。
+            {ui.feedbackRevisionHelp}
           </p>
         </section>
       </div>

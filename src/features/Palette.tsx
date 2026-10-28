@@ -1,3 +1,5 @@
+import { ui } from "../i18n";
+import { isMac } from "../platform";
 import { useEffect, useRef, useState } from "react";
 import { events, paletteAction } from "../api";
 import type { Snapshot } from "../types";
@@ -18,9 +20,6 @@ export function Palette({
   const project =
     snapshot.projects.find((p) => p.id === snapshot.active_project) ||
     snapshot.projects[0];
-  const aiProfile = snapshot.ai_catalog.profiles.find(
-    (p) => p.id === snapshot.ai_target?.profile_id,
-  );
   const [focusToken, setFocusToken] = useState(0);
   const [filter, setFilter] = useState(emptyFilter);
   const query = filter.query;
@@ -71,7 +70,7 @@ export function Palette({
       className="palette"
       role="dialog"
       aria-modal="true"
-      aria-label="レシピの小窓"
+      aria-label={ui.paletteLabel}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
@@ -115,10 +114,7 @@ export function Palette({
         </button>
       </div>
       <p className="muted">
-        {project.name} · {ids.length}本のセット
-        {aiProfile && snapshot.ai_target
-          ? ` · ${aiProfile[snapshot.ai_target.surface]}`
-          : ""}
+        {snapshot.repositories[project.id] ? project.name : ui.noProject} · {ids.length}本選択中
       </p>
       <div className="palette-resume">
         <button className="text-button" disabled={!previousIds.length} onClick={() => {setIds(previousIds);setValues(previousValues.current);setFocusToken(v=>v+1);}}>前回の続き</button>
@@ -170,7 +166,7 @@ export function Palette({
         }}
       />
       <p className="muted palette-keys">
-        ↑↓で移動 / Enterで選択 / {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Enterでコピー / Escで閉じる
+        ↑↓で移動 / Enterで選択 / {isMac() ? "⌘" : "Ctrl"}+Enterでコピー / Escで閉じる
       </p>
       <RecipeFilters
         search={false}
@@ -212,7 +208,7 @@ export function Palette({
             </button>
           ))}
           {!filtered.length && (
-            <p className="muted">該当するレシピはありません。</p>
+            <p className="muted">{ui.noPrompts}</p>
           )}
         </div>
       )}

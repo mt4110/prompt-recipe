@@ -1,5 +1,6 @@
 import { ui } from "../i18n";
-import { useEffect, useState } from "react";
+import { createSelectionState, selectionReducer, reorderSelection, previewIds } from "../selection";
+import { useEffect, useState, useReducer } from "react";
 import { message, request } from "../api";
 import type { Constraint, Recipe, Snapshot, Project } from "../types";
 import { discover, emptyFilter } from "../discovery";
@@ -29,14 +30,14 @@ export function Library({
   refresh: () => Promise<void>;
   notice: (s: string) => void;
 }) {
-  const [ids, setIds] = useState<string[]>([]);
-  const [previewSet, setPreviewSet] = useState(false);
+  const [selection, dispatchSelection] = useReducer(selectionReducer, snapshot.recipes.find(r=>!r.builtin)?.revision_id || "", createSelectionState);
+  const { checked: ids, focused: selected, previewSet } = selection;
+  const setIds = (update: string[] | ((current: string[]) => string[])) => dispatchSelection({type:"checked",update});
+  const setSelected = (id: string) => dispatchSelection({type:"focus",id});
+  const setPreviewSet = (set: boolean) => dispatchSelection({type:"preview",set});
   const [builtin, setBuiltin] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState(emptyFilter);
-  const [selected, setSelected] = useState(
-    snapshot.recipes.find((r) => !r.builtin)?.revision_id || "",
-  );
   const [edit, setEdit] = useState<{
     recipe_id: string | null;
     expected_revision: string | null;
@@ -184,8 +185,8 @@ export function Library({
                 {selectedRecipes.map((r) => (
                   <li key={r.revision_id}>
                     <span>{r.name}</span>
-                    <button type="button" aria-label={`${r.name}を上へ移動`} disabled={ids.indexOf(r.revision_id) === 0} onClick={() => setIds((current) => { const next = [...current]; const i = next.indexOf(r.revision_id); [next[i - 1], next[i]] = [next[i], next[i - 1]]; return next; })}>↑</button>
-                    <button type="button" aria-label={`${r.name}を下へ移動`} disabled={ids.indexOf(r.revision_id) === ids.length - 1} onClick={() => setIds((current) => { const next = [...current]; const i = next.indexOf(r.revision_id); [next[i], next[i + 1]] = [next[i + 1], next[i]]; return next; })}>↓</button>
+                    <button type="button" aria-label={`${r.name}を上へ移動`} disabled={ids.indexOf(r.revision_id) === 0} onClick={() => setIds(current => reorderSelection(current, r.revision_id, -1))}>↑</button>
+                    <button type="button" aria-label={`${r.name}を下へ移動`} disabled={ids.indexOf(r.revision_id) === ids.length - 1} onClick={() => setIds(current => reorderSelection(current, r.revision_id, 1))}>↓</button>
                     <button type="button" aria-label={`${r.name}を選択から外す`} onClick={() => setIds((current) => current.filter((id) => id !== r.revision_id))}>×</button>
                   </li>
                 ))}
@@ -248,7 +249,7 @@ export function Library({
             {!filtered.length && (
               <p className="muted">
                 {builtin
-                  ? "該当する教材はありません。"
+                  ? ui.noSamples
                   : <><button onClick={()=>start()}>最初の1本を登録</button><button className="text-button" onClick={()=>setBuiltin(true)}>サンプルから始める</button></>}
               </p>
             )}
@@ -270,7 +271,7 @@ export function Library({
                   assignment: [],
                   version: 1,
                 }}
-                ids={previewSet ? ids : [selected]}
+                ids={previewIds(selection)}
                 values={values}
                 setValues={setValues}
                 notice={notice}
@@ -288,7 +289,7 @@ export function Library({
                       const saved = await downloadPack(pack);
                       notice(
                         saved
-                          ? "レシピをExportしました。"
+                          ? ui.promptExported
                           : "Exportをキャンセルしました。",
                       );
                     } catch (e) {
@@ -331,7 +332,7 @@ export function Library({
           >
             <h2>導入する版を確認</h2>
             <p className="hint">
-              ローカルのJSONだけを読みます。プロジェクトの割当は現在の版に固定したままです。教材の根拠はレシピで確認できます。
+              {ui.importLocalHelp}
             </p>
             {importing.plan.changes.map((c, i) => (
               <p key={i}>
@@ -349,7 +350,7 @@ export function Library({
                 <summary>{r.name}の本文を確認</summary>
                 <pre>{r.body}</pre>
                 <p className="hint">
-                  {r.lesson?.evidence || "個人レシピ・効果未検証"}
+                  {r.lesson?.evidence || ui.personalUnverified}
                 </p>
               </details>
             ))}

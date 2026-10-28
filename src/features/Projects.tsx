@@ -1,3 +1,4 @@
+import { ui } from "../i18n";
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { desktop, message, request } from "../api";
@@ -234,7 +235,7 @@ export function Projects({
             <div className="recipe-list">
               {!filtered.length && (
                 <p className="muted">
-                  該当するレシピはありません。条件を戻して探せます。
+                  {ui.noProjectPrompts}
                 </p>
               )}
               {filtered.map((r) => (

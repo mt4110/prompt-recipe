@@ -1,3 +1,4 @@
+import { ui } from "./i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Composition } from "./types";
@@ -78,7 +79,9 @@ export async function copy(
   await navigator.clipboard.writeText(output);
   if(!draft)sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
     window.dispatchEvent(new Event("prompt-copied"));
-  return { warning: "開発用ブラウザでは利用履歴を記録しません。", characters: [...output].length };
+  const previewWarning = sessionStorage.getItem("preview-copy-notice-seen") ? null : ui.previewCopyNotice;
+  sessionStorage.setItem("preview-copy-notice-seen", "true");
+  return { warning: previewWarning, characters: [...output].length };
 }
 export async function readMaterial(): Promise<{
   text: string;
