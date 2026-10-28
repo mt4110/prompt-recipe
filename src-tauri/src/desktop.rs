@@ -5,11 +5,11 @@ use std::{collections::BTreeMap, sync::Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 struct State {
     store: Store,
-    shortcut: Mutex<String>,
+    shortcut: Mutex<crate::shortcuts::Status>,
     copy: Mutex<()>,
     last_output_hash: Mutex<Option<String>>,
 }
@@ -210,14 +210,79 @@ fn palette_action(
         _ => Err(Error::new("action", "操作が不正です。")),
     }
 }
+struct ShortcutRegistry(tauri::AppHandle);
+impl crate::shortcuts::Registry for ShortcutRegistry {
+    fn register(&self, binding: &str) -> std::result::Result<(), String> {
+        self.0
+            .global_shortcut()
+            .register(binding)
+            .map_err(|e| e.to_string())
+    }
+    fn unregister(&self, binding: &str) -> std::result::Result<(), String> {
+        self.0
+            .global_shortcut()
+            .unregister(binding)
+            .map_err(|e| e.to_string())
+    }
+}
 #[tauri::command]
-fn shortcut_status(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<String> {
+async fn shortcut_status(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<crate::shortcuts::Status> {
     authorized(&window)?;
-    app.state::<State>()
-        .shortcut
-        .lock()
-        .map(|s| s.clone())
-        .map_err(|_| Error::new("shortcut", "登録状態を取得できません。"))
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<State>()
+            .shortcut
+            .lock()
+            .map(|s| s.clone())
+            .map_err(|_| Error::new("shortcut", "登録状態を取得できません。"))
+    })
+    .await
+    .map_err(|_| Error::new("worker", "設定の取得に失敗しました。"))?
+}
+#[tauri::command]
+async fn set_shortcut(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    binding: String,
+) -> Result<crate::shortcuts::Status> {
+    authorized(&window)?;
+    if window.label() != "main" {
+        return Err(Error::new(
+            "permission",
+            "キーの変更は通常画面で行ってください。",
+        ));
+    }
+    let updated = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            let state = app.state::<State>();
+            let mut setting = state
+                .shortcut
+                .lock()
+                .map_err(|_| Error::new("shortcut", "キー設定を変更できません。"))?;
+            crate::shortcuts::change(
+                &ShortcutRegistry(app.clone()),
+                &mut setting,
+                &binding,
+                |value| {
+                    let value = value.to_owned();
+                    state
+                        .store
+                        .call(move |conn| crate::shortcuts::save(conn, &value))
+                        .map_err(|e| e.to_string())
+                },
+            );
+            Ok(setting.clone())
+        }
+    })
+    .await
+    .map_err(|_| Error::new("worker", "キー設定の変更に失敗しました。"))?;
+    if let Ok(ref status) = updated {
+        let _ = app.emit("shortcut-changed", status);
+    }
+    updated
 }
 #[tauri::command]
 fn read_material(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<Value> {
@@ -309,7 +374,11 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _, event| {
+                .with_handler(|app, shortcut, event| {
+                    let state=app.state::<State>();
+                    let Ok(setting)=state.shortcut.try_lock() else {return;};
+                    if !setting.registered || setting.binding.parse::<Shortcut>().map(|v|v.id()!=shortcut.id()).unwrap_or(true) {return;}
+                    drop(setting);
                     if event.state() == ShortcutState::Pressed {
                         if let Some(w) = app.get_webview_window("palette") {
                             if w.is_visible().unwrap_or(false) {
@@ -327,9 +396,12 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .setup(|app| {
             let path = app.path().app_data_dir()?;
             std::fs::create_dir_all(&path)?;
+            let store=Store::open(&path.join("recipes.sqlite"))?;
+            let loaded=store.call(|conn|crate::shortcuts::load(conn,cfg!(target_os="macos")));
+            let (binding,error)=match loaded {Ok(value)=>(value,None),Err(e)=>(crate::shortcuts::default_binding(cfg!(target_os="macos")).to_owned(),Some(e.to_string()))};
             app.manage(State {
-                store: Store::open(&path.join("recipes.sqlite"))?,
-                shortcut: Mutex::new(String::new()),
+                store,
+                shortcut: Mutex::new(crate::shortcuts::Status {binding,registered:false,error}),
                 copy: Mutex::new(()),
                 last_output_hash: Mutex::new(None),
             });
@@ -342,21 +414,11 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
             {
                 build_window(app.handle(), config)?;
             }
-            let modifiers = if cfg!(target_os = "macos") {
-                Modifiers::SUPER | Modifiers::SHIFT
-            } else {
-                Modifiers::CONTROL | Modifiers::SHIFT
-            };
-            let status = match app
-                .global_shortcut()
-                .register(Shortcut::new(Some(modifiers), Code::Space))
-            {
-                Ok(()) => "グローバルショートカット登録済み".to_owned(),
-                Err(_) => "ショートカットを登録できません。画面の「小窓を開く」を使ってください。"
-                    .to_owned(),
-            };
-            if let Ok(mut s) = app.state::<State>().shortcut.lock() {
-                *s = status;
+            let state=app.state::<State>();
+            let mut setting=state.shortcut.lock().map_err(|_|"キー設定を取得できません")?;
+            match app.global_shortcut().register(setting.binding.as_str()) {
+                Ok(())=>setting.registered=true,
+                Err(e)=>setting.error=Some(format!("キーを登録できませんでした（ほかのアプリとの衝突など）: {e}。画面の「小窓を開く」を使ってください。")),
             }
             Ok(())
         })
@@ -365,6 +427,7 @@ pub fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
             copy_prompt,
             palette_action,
             shortcut_status,
+            set_shortcut,
             read_material,
             open_repository,
             save_export

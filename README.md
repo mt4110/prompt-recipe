@@ -17,7 +17,7 @@ npm ci
 npm start
 ```
 
-グローバルキーはmacOSでCmd+Shift+Space。他OSではCtrl+Shift+Spaceを登録する（他OSは未検証）。
+小窓の既定キーはmacOSでOption+Space、Windows/LinuxではCtrl+Shift+Spaceです（他OSは未検証）。「設定」→「小窓を開くキー」で、プリセットかキー入力による記録を選び、変更・保存できます。登録失敗時は元のキーを維持し、理由を表示します。macOSは同じキーの共有登録を許す場合があるため、登録成功は競合がないことの保証ではありません。[Mac実動作の確認記録](docs/MAC-NATIVE-VALIDATION-2026-10-28.md)を参照してください。
 
 ```sh
 npm run build

@@ -1,4 +1,6 @@
 export const ui = {
+  shortcutSetting: "小窓を開くキー",
+  recordShortcut: "キーを押して記録",
   aiFormatExplanation: "短い見出しで環境・目的・プロンプトを区分します。必要な指示だけを渡します。",
   tryAiPrompt: "このAIでプロンプトを試す →",
   filterPrompts: "プロンプトを絞る",
