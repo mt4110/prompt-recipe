@@ -424,25 +424,22 @@ export function Library({
               }
             }}
           >
-            <h2 id="editor-title">自分のレシピを保存</h2>
-            <p className="muted">
-              旧版とプロジェクトの割当は保持します。構造化制約は本文と対応させてください。
-            </p>
+            <h2 id="editor-title">{edit.recipe_id ? "プロンプトを編集" : "プロンプトを登録"}</h2>
+            {edit.recipe_id && <p className="muted">新しい版として保存します。旧版とプロジェクトの割当は保持されます。</p>}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
                 try {
-                  const r = await request<Recipe>("save_recipe", edit);
+                  const payload = { ...edit, reason: edit.recipe_id ? (edit.reason.trim() || "更新") : "新規登録" };
+                  const r = await request<Recipe>("save_recipe", payload);
                   await refresh();
                   setSelected(r.revision_id);
                   setIds([r.revision_id]);
                   setBuiltin(false);
                   setValues({});
                   setEdit(null);
-                  notice(
-                    "新版を保存しました。プロジェクトで採用する版を選んでください。",
-                  );
+                  notice(edit.recipe_id ? "新しい版を保存しました。" : "保存しました。");
                 } catch (err) {
                   notice(message(err));
                 } finally {
@@ -459,7 +456,7 @@ export function Library({
                   onChange={(e) => setEdit({ ...edit, name: e.target.value })}
                 />
               </label>
-              <label>
+              {edit.recipe_id && <label>
                 説明
                 <input
                   value={edit.description}
@@ -467,7 +464,7 @@ export function Library({
                     setEdit({ ...edit, description: e.target.value })
                   }
                 />
-              </label>
+              </label>}
               <label>
                 本文
                 <textarea
@@ -478,12 +475,14 @@ export function Library({
                   onChange={(e) => setEdit({ ...edit, body: e.target.value })}
                 />
               </label>
-              <LintPanel text={edit.body} />
-              <ClassificationEditor
+              <details className="advanced-settings">
+                <summary>詳細設定（Lint・分類・構造化制約）</summary>
+                <LintPanel text={edit.body} />
+                <ClassificationEditor
                 actions={edit.actions}
                 goals={edit.goals}
                 onChange={(patch) => setEdit({ ...edit, ...patch })}
-              />
+                />
               <fieldset>
                 <legend>構造化制約（指定した項目のみ検査）</legend>
                 {keys.map((key, i) => (
@@ -526,6 +525,7 @@ export function Library({
                   />
                 </label>
               </details>
+              </details>
               <div className="actions">
                 <button
                   type="button"
@@ -535,7 +535,7 @@ export function Library({
                   キャンセル
                 </button>
                 <button className="primary" disabled={busy}>
-                  {busy ? "保存中…" : "新版を保存"}
+                  {busy ? "保存中…" : edit.recipe_id ? "新しい版として保存" : "保存"}
                 </button>
               </div>
             </form>
