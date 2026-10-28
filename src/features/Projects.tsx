@@ -43,7 +43,7 @@ export function Projects({
   const saved = snapshot.projects.find((p) => p.id === draft.id);
   const metadataDirty =
     !!saved &&
-    (draft.name !== saved.name || draft.environment !== saved.environment);
+    JSON.stringify(draft) !== JSON.stringify(saved);
   async function save() {
     setBusy(true);
     try {
@@ -65,8 +65,8 @@ export function Projects({
     <>
       <div className="page-heading">
         <div>
-          <h1>プロジェクトの依頼を整える</h1>
-          <p className="muted">いつもの指示を選んで、今回の素材を入れる。</p>
+          <h1>プロジェクトのセットと版を管理</h1>
+          <p className="muted">使うセットと採用する版を保存します。</p>
         </div>
         <button
           disabled={busy || !desktop}
@@ -175,10 +175,10 @@ export function Projects({
               disabled={busy}
               onClick={() => void save()}
             >
-              {busy ? "保存中…" : "このセットを保存"}
+              {busy ? "保存中…" : "変更を保存"}
             </button>
           </section>
-          <Sets
+          <details><summary>保存済みセットから選ぶ</summary><Sets
             snapshot={snapshot}
             ids={draft.assignment}
             apply={(ids) => {
@@ -187,10 +187,10 @@ export function Projects({
             }}
             refresh={refresh}
             notice={notice}
-          />
+          /></details>
           <section className="panel">
             <div className="section-title">
-              <h2>使うレシピ</h2>
+              <h2>使うプロンプト</h2>
               <span className="muted">選択順に合成</span>
             </div>
             <RecipeFilters value={filter} onChange={setFilter} />
@@ -263,7 +263,7 @@ export function Projects({
                   <span>
                     <strong>{r.name}</strong>
                     <small>
-                      {r.lesson?.area || "自分のレシピ"} · v{r.version}
+                      {r.lesson?.area || "自分のプロンプト"} · v{r.version}
                       {snapshot.recipes.some(
                         (c) => c.id === r.id && c.revision_id !== r.revision_id,
                       )
@@ -279,20 +279,20 @@ export function Projects({
         <div>
           {metadataDirty ? (
             <section className="panel">
-              <h2>名前・利用環境を保存してください</h2>
+              <h2>未保存の変更があります</h2>
               <p>
                 保存すると、その環境でのプレビューと制約検査に切り替わります。
               </p>
             </section>
           ) : saved ? (
-            <Composer
+            <details><summary>保存済みセットのプレビュー</summary><Composer
               project={saved}
               ids={draft.assignment}
               values={values}
               setValues={setValues}
               notice={notice}
               revealToken={reveal}
-            />
+            /></details>
           ) : (
             <section className="panel">
               <h2>まずプロジェクトを保存</h2>

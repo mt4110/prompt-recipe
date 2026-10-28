@@ -885,3 +885,26 @@ summary {
   flex: 0 0 auto;
   object-fit: contain;
 }
+
+/* Composed views remain available behind focused overlays. */
+.modal-backdrop > .onboarding, .modal-backdrop > .ai-comparison { max-height:90vh; overflow:auto; width:min(960px,94vw); background:#fcfcfd; border-radius:14px; padding:24px; }
+mark { background:#fff1ae; color:#242424; border-radius:2px; }
+.selected-recipes li { max-width:100%; flex-wrap:wrap; }
+.selected-recipes li span { overflow-wrap:anywhere; }
+label:has(> input[type="checkbox"]) { display:flex; align-items:center; gap:8px; }
+input[type="checkbox"] { width:auto; }
+
+@media (max-width: 600px) {
+ .shell { display:block; }
+ .shell > aside { width:auto; padding:8px; border-right:0; border-bottom:1px solid #e6e9ef; }
+ .shell > aside nav { display:flex; flex-wrap:wrap; gap:4px; }
+ .sidebar-note { display:none; }
+ .shell > main { padding:16px; min-width:0; }
+ .page-heading { display:block; }
+ .page-heading > .actions { margin-top:12px; flex-wrap:wrap; }
+ .page-heading h1 { overflow-wrap:normal; }
+ .columns > * { min-width:0; }
+ header { height:auto; min-height:62px; flex-wrap:wrap; gap:8px; padding:12px; }
+ header .actions { flex-wrap:wrap; }
+ .toast { width:calc(100vw - 32px); max-width:600px; }
+}

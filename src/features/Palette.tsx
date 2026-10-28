@@ -4,6 +4,7 @@ import type { Snapshot } from "../types";
 import { discover, emptyFilter } from "../discovery";
 import { RecipeFilters } from "./RecipeFilters";
 import { Composer } from "./Composer";
+let lastPalette: {ids:string[];values:Record<string,string>} = {ids:[],values:{}};
 export function Palette({
   snapshot,
   notice,
@@ -24,16 +25,25 @@ export function Palette({
   const query = filter.query;
   const [selected, setSelected] = useState(0);
   const [ids, setIds] = useState<string[]>([]);
-  const [previousIds, setPreviousIds] = useState<string[]>(project.assignment);
+  const [previousIds, setPreviousIds] = useState<string[]>(lastPalette.ids);
+  const [closeAfterCopy, setCloseAfterCopy] = useState(() => localStorage.getItem("palette-close-after-copy") !== "false");
+  const currentIds = useRef<string[]>([]);
+  const previousValues = useRef<Record<string,string>>(lastPalette.values);
+  const currentValues = useRef<Record<string,string>>({});
   const [values, setValues] = useState<Record<string, string>>({});
   const input = useRef<HTMLInputElement>(null);
   const filtered = discover(snapshot.recipes, filter);
   const browsing = !!(query || filter.action || filter.goal);
+  if(ids.length)lastPalette={ids,values};
+  currentIds.current = ids;
+  currentValues.current = values;
   useEffect(() => {
     input.current?.focus();
     let cleanup: () => void = () => {};
     let disposed = false;
     void events("palette-open", () => {
+      if(currentIds.current.length) { setPreviousIds(currentIds.current); previousValues.current=currentValues.current; }
+      setIds([]); setValues({}); setFilter(emptyFilter); setSelected(0);
       input.current?.focus();
     }).then((fn) => {
       if (disposed) fn();
@@ -45,7 +55,6 @@ export function Palette({
     };
   }, []);
   useEffect(() => {
-    setPreviousIds(project.assignment);
     setIds([]);
     setValues({});
   }, [project.id, project.version]);
@@ -104,15 +113,15 @@ export function Palette({
           : ""}
       </p>
       {!ids.length && previousIds.length > 0 && (
-        <button className="text-button" onClick={() => setIds(previousIds)}>
-          前回の続き（プロジェクトのセット）
+        <button className="text-button" onClick={() => {setIds(previousIds);setValues(previousValues.current);}}>
+          前回の続き
         </button>
       )}
       <input
         ref={input}
         type="search"
-        aria-label="レシピを検索"
-        placeholder="別のレシピを使う…"
+        aria-label="プロンプトを検索"
+        placeholder="プロンプトを検索…"
         value={query}
         onChange={(e) => {
           setFilter({ ...filter, query: e.target.value });
@@ -200,13 +209,15 @@ export function Palette({
           )}
         </div>
       )}
+      <label><input type="checkbox" checked={closeAfterCopy} onChange={e=>{setCloseAfterCopy(e.target.checked);localStorage.setItem("palette-close-after-copy",String(e.target.checked));}} />コピー後に小窓を閉じる</label>
       <Composer
+        standalone
         project={project}
         ids={ids}
         values={values}
         setValues={setValues}
         notice={notice}
-        onCopied={close}
+        onCopied={() => {setPreviousIds(ids);previousValues.current=values;if(closeAfterCopy)close();}}
         focusToken={focusToken}
       />
     </div>

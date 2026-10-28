@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { message, request } from "../api";
 import type { Snapshot } from "../types";
 export function FeedbackView({
@@ -10,9 +10,12 @@ export function FeedbackView({
   refresh: () => Promise<void>;
   notice: (s: string) => void;
 }) {
+  let recent: string[]=[]; try { recent=JSON.parse(sessionStorage.getItem("recent-revisions") || "[]"); } catch {}
+  const revisions=[...snapshot.revisions].sort((a,b)=>Number(recent.includes(b.recipe.revision_id))-Number(recent.includes(a.recipe.revision_id)));
   const [revision, setRevision] = useState(
-    snapshot.recipes[0]?.revision_id || "",
+    recent[0] || snapshot.recipes[0]?.revision_id || "",
   );
+  useEffect(()=>{const update=()=>{try { const ids=JSON.parse(sessionStorage.getItem("recent-revisions")||"[]");if(ids[0])setRevision(ids[0]); }catch{}};window.addEventListener("prompt-copied",update);return()=>window.removeEventListener("prompt-copied",update);},[]);
   const [outcome, setOutcome] = useState("手直しした");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,12 +52,12 @@ export function FeedbackView({
             }}
           >
             <label>
-              使ったレシピの版
+              使ったプロンプトの版
               <select
                 value={revision}
                 onChange={(e) => setRevision(e.target.value)}
               >
-                {snapshot.revisions.map((r) => (
+                {revisions.map((r) => (
                   <option
                     value={r.recipe.revision_id}
                     key={r.recipe.revision_id}

@@ -10,6 +10,7 @@ import { FeedbackView } from "./features/Feedback";
 import { Palette } from "./features/Palette";
 import { AiComparison } from "./features/AiComparison";
 import { Onboarding } from "./features/Onboarding";
+import { Overlay } from "./features/Overlay";
 const isPalette =
   new URLSearchParams(location.search).get("window") === "palette";
 export default function App() {
@@ -109,29 +110,9 @@ export default function App() {
       }}
     />
   );
-  if (!snapshot.onboarded || guide)
-    return (
-      <>
-        <div hidden={comparing}>
-          <Onboarding
-            snapshot={snapshot}
-            refresh={refresh}
-            notice={setNotice}
-            finish={() => setGuide(false)}
-            compare={() => setShowAi(true)}
-          />
-        </div>
-        {comparison}
-        {notice && (
-          <div className="toast" role="status">
-            {notice}
-          </div>
-        )}
-      </>
-    );
   return (
     <>
-      <div className="app" hidden={comparing}>
+      <div className="app" inert={comparing || !snapshot.onboarded || guide}>
         <header>
           <div className="brand">
             <img
@@ -158,7 +139,7 @@ export default function App() {
               }}
             >
               <Search size={15} />
-              小窓を開く <kbd>⌘⇧Space</kbd>
+              小窓を開く <kbd>{navigator.platform.includes("Mac") ? "⌘⇧Space" : "Ctrl+Shift+Space"}</kbd>
             </button>
           </div>
         </header>
@@ -194,7 +175,7 @@ export default function App() {
                   ? shortcut
                   : "ブラウザで操作確認中。Rustコアと開発用DBを使用。"}
               </p>
-              <span>教材の効果は未検証</span>
+              <details><summary>このアプリについて</summary><p>検査はアプリを通した文章のパターン検出です。未知の形式や言い換えは見逃し、誤検知もあります。自由文の意味検査やDLPの代わりにはなりません。本文と保存済みプロンプトは平文です。無視設定には値ではなくハッシュを保存します。</p></details>
             </div>
           </aside>
           <main>
@@ -248,7 +229,8 @@ export default function App() {
           </div>
         )}
       </div>
-      {comparison}
+      {comparison && <Overlay label="AIを比較・選択">{comparison}</Overlay>}
+      {(!snapshot.onboarded || guide) && <Overlay label="初回案内"><Onboarding snapshot={snapshot} refresh={refresh} notice={setNotice} finish={()=>setGuide(false)} compare={()=>setShowAi(true)} /></Overlay>}
     </>
   );
 }

@@ -1,6 +1,7 @@
+import { ui } from "../i18n";
 import { useEffect, useState } from "react";
 import { message, request } from "../api";
-import type { Constraint, Recipe, Snapshot } from "../types";
+import type { Constraint, Recipe, Snapshot, Project } from "../types";
 import { discover, emptyFilter } from "../discovery";
 import { ClassificationEditor, RecipeFilters } from "./RecipeFilters";
 import { Sets } from "./Sets";
@@ -50,6 +51,7 @@ export function Library({
     actions: string[];
     goals: string[];
   } | null>(null);
+  const [adoption, setAdoption] = useState<{recipe:Recipe;projects:Project[]} | null>(null);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState<{
     catalog: {
@@ -175,7 +177,7 @@ export function Library({
               自分の台帳{selectedRecipes.filter((r) => !r.builtin).length ? ` (${selectedRecipes.filter((r) => !r.builtin).length})` : ""}
             </button>
             <button aria-pressed={builtin} onClick={() => setBuiltin(true)}>
-              組み込み教材{selectedRecipes.some((r) => r.builtin) ? ` (${selectedRecipes.filter((r) => r.builtin).length})` : ""}
+              {ui.samples}{selectedRecipes.some((r) => r.builtin) ? ` (${selectedRecipes.filter((r) => r.builtin).length})` : ""}
             </button>
           </div>
           <section className="selected-recipes" aria-label="選択中のプロンプト">
@@ -193,6 +195,19 @@ export function Library({
               </ul>
             ) : <p className="muted">セットに追加するプロンプトを選んでください。</p>}
           </section>
+          <details><summary>セットを保存・選択</summary>
+          <Sets
+            snapshot={snapshot}
+            ids={ids}
+            apply={(v) => {
+              setIds(v);
+              setSelected(v[0] || "");
+              setValues({});
+            }}
+            refresh={refresh}
+            notice={notice}
+          />
+          </details>
           <RecipeFilters value={filter} onChange={setFilter} />
           <p role="status" className="muted">
             候補 {filtered.length}本 · 詳細の表示は保持します
@@ -221,13 +236,12 @@ export function Library({
                   key={r.id}
                   onClick={() => {
                     setSelected(r.revision_id);
-                    setValues({});
                   }}
                 >
                   <strong>{r.name}</strong>
                   <span>{r.description}</span>
                   <small>
-                    {r.builtin ? "教材候補" : "自分のレシピ"} · v{r.version}
+                    {r.builtin ? "サンプル" : "自分のプロンプト"} · v{r.version}
                   </small>
                 </button>
               </div>
@@ -236,27 +250,15 @@ export function Library({
               <p className="muted">
                 {builtin
                   ? "該当する教材はありません。"
-                  : "プロンプトを登録するか、組み込み教材から自分用に取り込めます。"}
+                  : <><button onClick={()=>start()}>最初の1本を登録</button><button className="text-button" onClick={()=>setBuiltin(true)}>サンプルから始める</button></>}
               </p>
             )}
           </div>
         </section>
         <div>
-          <Sets
-            snapshot={snapshot}
-            ids={ids}
-            apply={(v) => {
-              setIds(v);
-              setSelected(v[0] || "");
-              setValues({});
-            }}
-            refresh={refresh}
-            notice={notice}
-          />
           {recipe && (
             <>
-              <LessonView recipe={recipe} />
-              <LintPanel text={recipe.body} />
+              <details><summary>使い方・実例・限界</summary><LessonView recipe={recipe} /></details>
 
               <Composer
                 standalone
@@ -268,7 +270,7 @@ export function Library({
                   assignment: [],
                   version: 1,
                 }}
-                ids={ids}
+                ids={ids.length ? ids : [selected]}
                 values={values}
                 setValues={setValues}
                 notice={notice}
@@ -307,8 +309,6 @@ export function Library({
                       key={r.recipe.revision_id}
                       onClick={() => {
                         setSelected(r.recipe.revision_id);
-                        setIds([r.recipe.revision_id]);
-                        setValues({});
                       }}
                     >
                       v{r.recipe.version} · {r.reason}
@@ -395,6 +395,7 @@ export function Library({
           </section>
         </div>
       )}
+      {adoption && <section className="panel"><h2>プロジェクトで使う版</h2>{adoption.projects.map(p=><p key={p.id}>{p.name} は旧版を使っています。<button onClick={async()=>{try {await request("save_project",{project:{...p,assignment:p.assignment.map(id=>snapshot.revisions.some(v=>v.recipe.revision_id===id && v.recipe.id===adoption.recipe.id)?adoption.recipe.revision_id:id)},expected_version:p.version});await refresh();setAdoption(null);notice("採用する版を切り替えました。");}catch(e){notice(message(e));}}}>新しい版に切り替える</button></p>)}<button onClick={()=>setAdoption(null)}>旧版を使い続ける</button></section>}
       {edit && (
         <div className="modal-backdrop">
           <section
@@ -431,6 +432,8 @@ export function Library({
                 try {
                   const payload = { ...edit, reason: edit.recipe_id ? (edit.reason.trim() || "更新") : "新規登録" };
                   const r = await request<Recipe>("save_recipe", payload);
+                  const projects=edit.recipe_id ? snapshot.projects.filter(p=>p.assignment.some(id=>snapshot.revisions.some(v=>v.recipe.revision_id===id && v.recipe.id===r.id))) : [];
+                  if(projects.length)setAdoption({recipe:r,projects});
                   await refresh();
                   setSelected(r.revision_id);
                   setIds([r.revision_id]);
@@ -510,19 +513,18 @@ export function Library({
                   </label>
                 ))}
               </fieldset>
-              <details>
+              {edit.recipe_id && <details>
                 <summary>変更理由（任意で調整）</summary>
                 <label>
                   変更理由
                   <input
-                    required
                     value={edit.reason}
                     onChange={(e) =>
                       setEdit({ ...edit, reason: e.target.value })
                     }
                   />
                 </label>
-              </details>
+              </details>}
               </details>
               <div className="actions">
                 <button
