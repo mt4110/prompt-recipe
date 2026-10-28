@@ -9,3 +9,5 @@ Local advisory pattern checks highlight possible credentials and personal data. 
 Checks cover only text passing through this app. Unknown formats may be missed and false positives occur. This is not semantic analysis or DLP. See [rule provenance, storage boundaries and validation limits](docs/ADVISORY-CHECKS.md). Windows and native clipboard/global-shortcut behavior require separate device validation.
 
 See the [Japanese README](README.md) for build commands and development notes.
+
+Development requires Node.js >=22.18.0. Use `nvm install && nvm use` and `npm test` for frontend regression tests. See the third-round section in the validation notes for masking, overlapping findings, OS detection and known dependency audit limitations.
