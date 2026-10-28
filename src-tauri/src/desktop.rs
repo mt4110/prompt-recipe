@@ -83,7 +83,9 @@ async fn copy_prompt(
         let ids = request.revision_ids.clone();
         let record_usage = request.draft.is_none();
         let composed = state.store.call(move |conn| {
-            if let Some(draft)=request.draft { return application::draft_composition(&draft, &request.values); }
+            if let Some(draft) = request.draft {
+                return application::draft_composition(&draft, &request.values);
+            }
             application::output_composition(
                 conn,
                 &request.project_id,
@@ -124,11 +126,15 @@ async fn copy_prompt(
         if let Ok(mut last) = state.last_output_hash.lock() {
             *last = Some(format!("{:x}", Sha256::digest(output.as_bytes())));
         }
-        let warning = if record_usage { state
-            .store
-            .call(move |conn| application::record_use(conn, &request.operation_id, &ids))
-            .err()
-            .map(|_| "コピー済みですが利用記録を保存できませんでした。") } else { None };
+        let warning = if record_usage {
+            state
+                .store
+                .call(move |conn| application::record_use(conn, &request.operation_id, &ids))
+                .err()
+                .map(|_| "コピー済みですが利用記録を保存できませんでした。")
+        } else {
+            None
+        };
         Ok(json!({"copied":true,"warning":warning,"characters":output.chars().count()}))
     })
     .await

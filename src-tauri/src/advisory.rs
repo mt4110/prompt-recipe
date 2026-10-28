@@ -74,18 +74,32 @@ fn valid(rule: &str, s: &str) -> bool {
 // Bare numeric identifiers are ambiguous. Checksums alone do not establish their meaning.
 fn numeric_context(rule: &str, text: &str, start: usize, end: usize) -> bool {
     let phone = rule == "phone" || rule.contains("phone");
-    if !phone && rule != "credit-card" { return true; }
+    if !phone && rule != "credit-card" {
+        return true;
+    }
     let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
     let line_end = text[end..].find('\n').map_or(text.len(), |i| end + i);
     let line = text[line_start..line_end].to_lowercase();
     if phone {
         let value = &text[start..end];
         let count = digits(value).len();
-        if !(if value.starts_with("+81") { [11, 12].contains(&count) } else { [10, 11].contains(&count) }) { return false; }
-        return value.contains('-') || value.contains(' ') || value.starts_with("+81")
-            || ["電話", "携帯", "tel", "phone", "fax"].iter().any(|word| line.contains(word));
+        if !(if value.starts_with("+81") {
+            [11, 12].contains(&count)
+        } else {
+            [10, 11].contains(&count)
+        }) {
+            return false;
+        }
+        return value.contains('-')
+            || value.contains(' ')
+            || value.starts_with("+81")
+            || ["電話", "携帯", "tel", "phone", "fax"]
+                .iter()
+                .any(|word| line.contains(word));
     }
-    ["カード", "クレジット", "credit", "card", "pan", "cc_number"].iter().any(|word| line.contains(word))
+    ["カード", "クレジット", "credit", "card", "pan", "cc_number"]
+        .iter()
+        .any(|word| line.contains(word))
 }
 pub fn inspect(text: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
@@ -151,33 +165,95 @@ mod regression {
     use super::*;
     #[test]
     fn ambiguous_numeric_identifiers_need_context() {
-        for text in ["0312345678", "4111111111111111", "注文番号: 4111111111111111"] { assert!(inspect(text).is_empty(), "unexpected candidate: {text}"); }
-        for text in ["電話: 0312345678", "03-1234-5678", "+81-3-1234-5678", "カード番号: 4111111111111111"] { assert!(!inspect(text).is_empty(), "missing candidate: {text}"); }
+        for text in [
+            "0312345678",
+            "4111111111111111",
+            "注文番号: 4111111111111111",
+        ] {
+            assert!(inspect(text).is_empty(), "unexpected candidate: {text}");
+        }
+        for text in [
+            "電話: 0312345678",
+            "03-1234-5678",
+            "+81-3-1234-5678",
+            "カード番号: 4111111111111111",
+        ] {
+            assert!(!inspect(text).is_empty(), "missing candidate: {text}");
+        }
         assert!(inspect("カード番号: 4111111111111112").is_empty());
     }
     #[test]
     fn all_bundled_rule_patterns_have_dummy_positive_and_negative_examples() {
-        let samples=[
-            ("creds.aws.access_key_id",format!("AKIA{}","A".repeat(16))),
-            ("creds.aws.secret_key_config",format!("aws_secret_access_key={}","a".repeat(40))),
-            ("creds.github.pat.ghp",format!("ghp_{}","a".repeat(36))),
-            ("creds.github.pat.long",format!("github_pat_{}","a".repeat(80))),
-            ("creds.slack.token.legacy",format!("xoxb-1234567890-1234567890-{}","a".repeat(24))),
-            ("creds.key.private_pem","-----BEGIN PRIVATE KEY-----".into()),
-            ("pii.jp.phone.mobile","090-0000-0000".into()),
-            ("pii.jp.phone.landline.keyword","電話 03-0000-0000".into()),
-            ("pii.net.email","dummy@example.test".into()),
+        let samples = [
+            ("creds.aws.access_key_id", format!("AKIA{}", "A".repeat(16))),
+            (
+                "creds.aws.secret_key_config",
+                format!("aws_secret_access_key={}", "a".repeat(40)),
+            ),
+            ("creds.github.pat.ghp", format!("ghp_{}", "a".repeat(36))),
+            (
+                "creds.github.pat.long",
+                format!("github_pat_{}", "a".repeat(80)),
+            ),
+            (
+                "creds.slack.token.legacy",
+                format!("xoxb-1234567890-1234567890-{}", "a".repeat(24)),
+            ),
+            (
+                "creds.key.private_pem",
+                "-----BEGIN PRIVATE KEY-----".into(),
+            ),
+            ("pii.jp.phone.mobile", "090-0000-0000".into()),
+            ("pii.jp.phone.landline.keyword", "電話 03-0000-0000".into()),
+            ("pii.net.email", "dummy@example.test".into()),
         ];
-        for (id,sample) in samples { let (_,regex)=rules().iter().find(|(name,_)|name==id).expect("rule"); assert!(regex.is_match(&sample),"{id}"); assert!(!regex.is_match("ordinary dummy prose"),"{id}"); }
-        for text in ["確認 API_SECRET=dummy-value","PASSWORD=dummy-value","sk-abcdefghijklmnopqrstuvwx","eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.dummySignature","postgres://dummy:dummy-pass@localhost/db","カード番号: 4111111111111111","dummy@example.test","090-0000-0000"] { assert!(!inspect(text).is_empty()); }
+        for (id, sample) in samples {
+            let (_, regex) = rules().iter().find(|(name, _)| name == id).expect("rule");
+            assert!(regex.is_match(&sample), "{id}");
+            assert!(!regex.is_match("ordinary dummy prose"), "{id}");
+        }
+        for text in [
+            "確認 API_SECRET=dummy-value",
+            "PASSWORD=dummy-value",
+            "sk-abcdefghijklmnopqrstuvwx",
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.dummySignature",
+            "postgres://dummy:dummy-pass@localhost/db",
+            "カード番号: 4111111111111111",
+            "dummy@example.test",
+            "090-0000-0000",
+        ] {
+            assert!(!inspect(text).is_empty());
+        }
     }
     #[test]
     fn mynumber_check_digit_and_mask_snapshot() {
-        let base="12345678901"; let d=digits(base);let sum:u32=d.iter().rev().enumerate().map(|(i,v)|v*(if i<6{i+2}else{i-4}) as u32).sum();let rem=sum%11;let check=if rem<=1{0}else{11-rem};let n=format!("{base}{check}");assert!(valid("mynumber",&n));assert!(!valid("mynumber",&format!("{base}{}",(check+1)%10)));
-        let text="確認 API_SECRET=dummy-value\ndummy@example.test";assert_eq!(mask(text,&inspect(text)),"確認 [MASKED]\n[MASKED]");
+        let base = "12345678901";
+        let d = digits(base);
+        let sum: u32 = d
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(i, v)| v * (if i < 6 { i + 2 } else { i - 4 }) as u32)
+            .sum();
+        let rem = sum % 11;
+        let check = if rem <= 1 { 0 } else { 11 - rem };
+        let n = format!("{base}{check}");
+        assert!(valid("mynumber", &n));
+        assert!(!valid("mynumber", &format!("{base}{}", (check + 1) % 10)));
+        let text = "確認 API_SECRET=dummy-value\ndummy@example.test";
+        assert_eq!(mask(text, &inspect(text)), "確認 [MASKED]\n[MASKED]");
     }
     #[test]
     fn records_actual_ten_thousand_character_scan_time() {
-        let text=format!("{}\ndummy@example.test","文".repeat(9981));let started=std::time::Instant::now();let found=inspect(&text);eprintln!("advisory input_chars={} elapsed_us={} findings={}",text.chars().count(),started.elapsed().as_micros(),found.len());assert_eq!(found.len(),1);
+        let text = format!("{}\ndummy@example.test", "文".repeat(9981));
+        let started = std::time::Instant::now();
+        let found = inspect(&text);
+        eprintln!(
+            "advisory input_chars={} elapsed_us={} findings={}",
+            text.chars().count(),
+            started.elapsed().as_micros(),
+            found.len()
+        );
+        assert_eq!(found.len(), 1);
     }
 }
