@@ -911,3 +911,7 @@ input[type="checkbox"] { width:auto; }
 
 .advisory-findings { display:grid; gap:8px; padding:0; list-style:none; }
 .advisory-findings li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border:1px solid #e6e9ef; border-radius:8px; padding:8px 12px; }
+
+.advisory-review { margin:16px 0; padding:12px 16px; border:1px solid #e9ce74; border-radius:10px; background:#fffcf0; }
+.advisory-review h3 { margin:0 0 8px; }
+.advisory-review .advisory-findings { margin-bottom:0; }

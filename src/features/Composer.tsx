@@ -231,10 +231,12 @@ export function Composer({
       <pre aria-busy={pending}>
         {pending || resolvedKey.current !== inputKey ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={advisoryRuleLabel(f.rule)}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
       </pre>
-      {result && <details><summary>詳細・Lint</summary><LintPanel text={result.body} /><p>自由文の意味検査は行いません。</p></details>}
       {inspectionFailed && <p role="status" className="hint">秘密情報の検査を完了できませんでした。未検査の本文をそのままコピーできます。{inspectionFailure?.message}</p>}
+      {!!activeFindings.length && <section className="advisory-review" aria-label="コピー前の検出確認">
+        <h3>コピー前の確認</h3>
       {!!activeFindings.length && <p role="status">秘密情報・個人情報らしき文字列 {activeFindings.length}件。コピー前に確認してください。</p>}
       {!!activeFindings.length && <ul className="advisory-findings" aria-label="検出候補ごとの操作">{activeFindings.map((f, index) => <li key={f.fingerprint}><span>{advisoryRuleLabel(f.rule)} {index + 1}</span><button className="text-button" aria-label={`${advisoryRuleLabel(f.rule)} ${index + 1}をこのプロンプトでは無視`} onClick={() => { const next=[...ignored,`${scope}:${f.fingerprint}`].slice(-512); localStorage.setItem("advisory-ignores",JSON.stringify(next)); setIgnored(next); }}>このプロンプトでは無視</button></li>)}</ul>}
+      </section>}
       <div className="footer">
         <span className="muted">コピー時に本文・入力値を記録しません</span>
         <button
@@ -248,6 +250,7 @@ export function Composer({
         </button>
         {!!activeFindings.length && <button disabled={pending || copying || !result || result.blocked} onClick={() => void doCopy(false)}>そのままコピー</button>}
       </div>
+      {result && <details><summary>詳細・Lint</summary><LintPanel text={result.body} /><p>自由文の意味検査は行いません。</p></details>}
     </section>
   );
 }
