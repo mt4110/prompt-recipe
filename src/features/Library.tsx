@@ -172,7 +172,7 @@ export function Library({
         <section className="panel">
           <div className="filter-chips">
             <button aria-pressed={!builtin} onClick={() => setBuiltin(false)}>
-              自分の台帳{ids.filter((id) => selectedRecipes.some((r) => r.revision_id === id && !r.builtin)).length ? ` (${selectedRecipes.filter((r) => !r.builtin).length})` : ""}
+              自分の台帳{selectedRecipes.filter((r) => !r.builtin).length ? ` (${selectedRecipes.filter((r) => !r.builtin).length})` : ""}
             </button>
             <button aria-pressed={builtin} onClick={() => setBuiltin(true)}>
               組み込み教材{selectedRecipes.some((r) => r.builtin) ? ` (${selectedRecipes.filter((r) => r.builtin).length})` : ""}
@@ -185,11 +185,9 @@ export function Library({
                 {selectedRecipes.map((r) => (
                   <li key={r.revision_id}>
                     <span>{r.name}</span>
-                    <button
-                      type="button"
-                      aria-label={`${r.name}を選択から外す`}
-                      onClick={() => setIds((current) => current.filter((id) => id !== r.revision_id))}
-                    >×</button>
+                    <button type="button" aria-label={`${r.name}を上へ移動`} disabled={ids.indexOf(r.revision_id) === 0} onClick={() => setIds((current) => { const next = [...current]; const i = next.indexOf(r.revision_id); [next[i - 1], next[i]] = [next[i], next[i - 1]]; return next; })}>↑</button>
+                    <button type="button" aria-label={`${r.name}を下へ移動`} disabled={ids.indexOf(r.revision_id) === ids.length - 1} onClick={() => setIds((current) => { const next = [...current]; const i = next.indexOf(r.revision_id); [next[i], next[i + 1]] = [next[i + 1], next[i]]; return next; })}>↓</button>
+                    <button type="button" aria-label={`${r.name}を選択から外す`} onClick={() => setIds((current) => current.filter((id) => id !== r.revision_id))}>×</button>
                   </li>
                 ))}
               </ul>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { message, request } from "../api";
+import { desktop, message, request } from "../api";
 import type { Snapshot } from "../types";
 import { Composer } from "./Composer";
 
@@ -153,7 +153,7 @@ export function Onboarding({
             指示書と正本の参照先を入れる。
           </h1>
           <p className="onboarding-lead">
-            AIがアクセスできるファイル名や資料を指定します。会話だけのAIには、その資料の内容も一緒に渡してください。
+            例の依頼を自分の用途に合わせ、変数を入力してコピーできます。AIへの送信は行いません。
           </p>
           <Composer
             standalone
@@ -169,8 +169,7 @@ export function Onboarding({
             materialEnabled={false}
           />
           <p className="hint">
-            入力例：AGENTS.md と
-            docs/ARCHITECTURE.md。実際にある参照先へ置き換えてください。コピー後は、いつものAIの依頼に添えて貼り付けます。
+            入力した内容はこの案内のプレビューとコピーに使います。保存操作をしない限り、セットには含まれません。
           </p>
           <div className="onboarding-actions">
             <button onClick={() => advance(0)}>戻る</button>
@@ -186,7 +185,7 @@ export function Onboarding({
             次から、選んでコピーするだけに。
           </h1>
           <p className="onboarding-lead">
-            このレシピと選んだ用途の候補を、名前付きセットとして保存できます。参照先や今回の素材は保存しません。Gitプロジェクトを開いた後、セットを割り当てられます。
+            このプロンプトをセットとして保存できます。セットとプロジェクトの割り当ては、あとから台帳で使えます。
           </p>
           <section className="panel">
             <label>
@@ -207,12 +206,13 @@ export function Onboarding({
             </div>
           </section>
           <div className="next-learning">
-            <strong>今回追加する候補</strong>
-            <p>{recommended.map((r) => r.name).join(" / ") || recipe.name}</p>
+            <strong>今回追加するプロンプト</strong>
+            <p>{recipe.name}</p>
             <strong>慣れてきたら</strong>
             <p>台帳に自分の指示を登録する → 名前と本文だけで使う。</p>
             <p>手直ししたら → 「改善の記録」に残して、自分用の新版を作る。</p>
-            <p>素早く使う → 小窓から検索し、Tabで入力、⌘Enterでコピー。</p>
+            <p>素早く使う → 小窓から検索し、入力してコピー。</p>
+            {!desktop && <p className="muted">プロジェクト割り当てと小窓はデスクトップアプリで利用できます。</p>}
           </div>
           <div className="onboarding-actions">
             <button disabled={busy} onClick={() => advance(1)}>
