@@ -18,9 +18,13 @@ jobs:
         with:
           node-version: '26'
           cache: npm
+      - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: npm ci
       - run: npm run build
-      - run: npm run test:discovery
+      - run: npm test
+      - run: npm audit --audit-level=moderate
       - run: npm run check:boundary
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - run: rustup run 1.99.1 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: rustup run 1.99.1 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - run: rustup run 1.99.1 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --locked
+      - run: rustup run 1.99.1 cargo check --manifest-path src-tauri/Cargo.toml --locked
