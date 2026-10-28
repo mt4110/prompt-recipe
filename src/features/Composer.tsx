@@ -54,6 +54,7 @@ export function Composer({
     setPending(true);
     setError("");
     if (!ids.length) {
+      resolvedKey.current = inputKey;
       setResult(null);
       setPending(false);
       return;
