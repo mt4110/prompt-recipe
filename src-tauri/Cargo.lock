@@ -2654,7 +2654,7 @@ dependencies = [
 
 [[package]]
 name = "prompt-recipe"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "quick-xml 0.42.0",
  "regex",
