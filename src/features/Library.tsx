@@ -81,6 +81,9 @@ export function Library({
     snapshot.recipes.filter((r) => r.builtin === builtin),
     filter,
   );
+  const selectedRecipes = ids
+    .map((id) => snapshot.revisions.find((r) => r.recipe.revision_id === id)?.recipe)
+    .filter((r): r is Recipe => Boolean(r));
   function start(r?: Recipe) {
     setEdit({
       recipe_id: r && !r.builtin ? r.id : null,
@@ -169,12 +172,29 @@ export function Library({
         <section className="panel">
           <div className="filter-chips">
             <button aria-pressed={!builtin} onClick={() => setBuiltin(false)}>
-              自分の台帳
+              自分の台帳{ids.filter((id) => selectedRecipes.some((r) => r.revision_id === id && !r.builtin)).length ? ` (${selectedRecipes.filter((r) => !r.builtin).length})` : ""}
             </button>
             <button aria-pressed={builtin} onClick={() => setBuiltin(true)}>
-              組み込み教材
+              組み込み教材{selectedRecipes.some((r) => r.builtin) ? ` (${selectedRecipes.filter((r) => r.builtin).length})` : ""}
             </button>
           </div>
+          <section className="selected-recipes" aria-label="選択中のプロンプト">
+            <strong>選択中のプロンプト ({selectedRecipes.length})</strong>
+            {selectedRecipes.length ? (
+              <ul>
+                {selectedRecipes.map((r) => (
+                  <li key={r.revision_id}>
+                    <span>{r.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`${r.name}を選択から外す`}
+                      onClick={() => setIds((current) => current.filter((id) => id !== r.revision_id))}
+                    >×</button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted">セットに追加するプロンプトを選んでください。</p>}
+          </section>
           <RecipeFilters value={filter} onChange={setFilter} />
           <p role="status" className="muted">
             候補 {filtered.length}本 · 詳細の表示は保持します
@@ -203,7 +223,6 @@ export function Library({
                   key={r.id}
                   onClick={() => {
                     setSelected(r.revision_id);
-                    setIds([r.revision_id]);
                     setValues({});
                   }}
                 >
