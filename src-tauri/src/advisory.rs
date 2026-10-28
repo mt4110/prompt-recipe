@@ -23,7 +23,7 @@ fn rules() -> &'static Vec<(String, Regex)> {
             ("private-key", r"(?s)-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----.*?(?:-----END (?:[A-Z]+ )?PRIVATE KEY-----|$)"),
             ("env-secret", r#"(?im)\b(?:export\s+)?(?:[A-Z0-9_]*(?:SECRET|TOKEN)|PASSWORD)\s*=\s*[^\r\n]+"#),
             ("email", r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"),
-            ("phone", r"\b(?:\+81[- ]?|0)[0-9]{1,4}[- ]?[0-9]{1,4}[- ]?[0-9]{4}\b"),
+            ("phone", r"(?:\+81[- ]?|\b0)[0-9]{1,4}[- ]?[0-9]{1,4}[- ]?[0-9]{4}\b"),
             ("api-key", r"\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{35}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
             ("jwt", r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
             ("connection-password", r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s/:@]+:[^\s/@]+@"),
@@ -71,11 +71,27 @@ fn valid(rule: &str, s: &str) -> bool {
     }
     true
 }
+// Bare numeric identifiers are ambiguous. Checksums alone do not establish their meaning.
+fn numeric_context(rule: &str, text: &str, start: usize, end: usize) -> bool {
+    let phone = rule == "phone" || rule.contains("phone");
+    if !phone && rule != "credit-card" { return true; }
+    let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[end..].find('\n').map_or(text.len(), |i| end + i);
+    let line = text[line_start..line_end].to_lowercase();
+    if phone {
+        let value = &text[start..end];
+        let count = digits(value).len();
+        if !(if value.starts_with("+81") { [11, 12].contains(&count) } else { [10, 11].contains(&count) }) { return false; }
+        return value.contains('-') || value.contains(' ') || value.starts_with("+81")
+            || ["電話", "携帯", "tel", "phone", "fax"].iter().any(|word| line.contains(word));
+    }
+    ["カード", "クレジット", "credit", "card", "pan", "cc_number"].iter().any(|word| line.contains(word))
+}
 pub fn inspect(text: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
     for (id, regex) in rules() {
         for m in regex.find_iter(text) {
-            if valid(id, m.as_str()) {
+            if valid(id, m.as_str()) && numeric_context(id, text, m.start(), m.end()) {
                 findings.push(Finding {
                     rule: id.clone(),
                     start: m.start(),
@@ -134,6 +150,12 @@ mod tests {
 mod regression {
     use super::*;
     #[test]
+    fn ambiguous_numeric_identifiers_need_context() {
+        for text in ["0312345678", "4111111111111111", "注文番号: 4111111111111111"] { assert!(inspect(text).is_empty(), "unexpected candidate: {text}"); }
+        for text in ["電話: 0312345678", "03-1234-5678", "+81-3-1234-5678", "カード番号: 4111111111111111"] { assert!(!inspect(text).is_empty(), "missing candidate: {text}"); }
+        assert!(inspect("カード番号: 4111111111111112").is_empty());
+    }
+    #[test]
     fn all_bundled_rule_patterns_have_dummy_positive_and_negative_examples() {
         let samples=[
             ("creds.aws.access_key_id",format!("AKIA{}","A".repeat(16))),
@@ -147,7 +169,7 @@ mod regression {
             ("pii.net.email","dummy@example.test".into()),
         ];
         for (id,sample) in samples { let (_,regex)=rules().iter().find(|(name,_)|name==id).expect("rule"); assert!(regex.is_match(&sample),"{id}"); assert!(!regex.is_match("ordinary dummy prose"),"{id}"); }
-        for text in ["確認 API_SECRET=dummy-value","PASSWORD=dummy-value","sk-abcdefghijklmnopqrstuvwx","eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.dummySignature","postgres://dummy:dummy-pass@localhost/db","4111111111111111","dummy@example.test","090-0000-0000"] { assert!(!inspect(text).is_empty()); }
+        for text in ["確認 API_SECRET=dummy-value","PASSWORD=dummy-value","sk-abcdefghijklmnopqrstuvwx","eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.dummySignature","postgres://dummy:dummy-pass@localhost/db","カード番号: 4111111111111111","dummy@example.test","090-0000-0000"] { assert!(!inspect(text).is_empty()); }
     }
     #[test]
     fn mynumber_check_digit_and_mask_snapshot() {
