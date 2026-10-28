@@ -154,12 +154,7 @@ pub fn composition(
         .iter()
         .map(|id| revision(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let result = compose(&recipes, &project(conn, project_id)?, values)?;
-    if let Some(target) = ai_target(conn, project_id)? {
-        crate::ai::adapt(result, &target)
-    } else {
-        Ok(result)
-    }
+    compose_revisions(&recipes, &project(conn, project_id)?, values, ai_target(conn, project_id)?)
 }
 
 pub fn ledger_composition(
@@ -177,7 +172,7 @@ pub fn ledger_composition(
         .iter()
         .map(|id| revision(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    compose(
+    compose_revisions(
         &recipes,
         &Project {
             id: "ledger".into(),
@@ -188,7 +183,21 @@ pub fn ledger_composition(
             version: 1,
         },
         values,
+        None,
     )
+}
+
+fn compose_revisions(
+    recipes: &[Recipe],
+    project: &Project,
+    values: &BTreeMap<String, String>,
+    target: Option<crate::ai::AiTarget>,
+) -> Result<Composition> {
+    let composed = compose(recipes, project, values)?;
+    match target {
+        Some(target) => crate::ai::adapt(composed, &target),
+        None => Ok(composed),
+    }
 }
 fn ai_target(conn: &Connection, project_id: &str) -> Result<Option<crate::ai::AiTarget>> {
     let data: Option<String> = conn
