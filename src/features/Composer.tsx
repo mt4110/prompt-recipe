@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { copySuccess, copyFailure } from "../copyMessages";
 import { LintPanel } from "./LintPanel";
 import { copy, message, readMaterial, request } from "../api";
 import type { Composition, Project, Recipe } from "../types";
@@ -26,6 +27,10 @@ export function Composer({
   focusToken?: number;
   standalone?: boolean;
 }) {
+  const [includeContext, setIncludeContext] = useState(() => localStorage.getItem(`context:${project.id}`) === "true");
+  const [aiFormat, setAiFormat] = useState(false);
+  const [ignored, setIgnored] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("advisory-ignores") || "[]"); } catch { return []; } });
+  const scope = ids.join(":");
   const [result, setResult] = useState<Composition | null>(null);
   const [pending, setPending] = useState(true);
   const [copying, setCopying] = useState(false);
@@ -34,11 +39,14 @@ export function Composer({
   const lastFocus = useRef(0);
   const [error, setError] = useState("");
   const lastContext = useRef("");
+  const inputKey=JSON.stringify([project.id,project.version,ids,values,standalone,includeContext,aiFormat]);
+  const resolvedKey=useRef("");
   useEffect(() => {
     let active = true;
-    const context = JSON.stringify([project.id, project.version, ids]);
+    const context = JSON.stringify([project.id, project.version, ids, standalone, includeContext, aiFormat]);
     const inputOnly = lastContext.current === context;
     lastContext.current = context;
+    if (!inputOnly) setResult(null);
     setPending(true);
     setError("");
     if (!ids.length) {
@@ -52,11 +60,14 @@ export function Composer({
         request<Composition>("compose", {
           project_id: project.id,
           standalone,
+          include_context: includeContext,
+          ai_format: aiFormat,
           revision_ids: ids,
           values,
         })
           .then((r) => {
             if (active) {
+              resolvedKey.current=inputKey;
               setResult(r);
               setPending(false);
             }
@@ -74,7 +85,7 @@ export function Composer({
       active = false;
       clearTimeout(timer);
     };
-  }, [project.id, project.version, ids, values, standalone]);
+  }, [project.id, project.version, ids, values, standalone, includeContext, aiFormat]);
   useEffect(() => {
     if (pending || revealToken === lastReveal.current) return;
     lastReveal.current = revealToken;
@@ -102,15 +113,24 @@ export function Composer({
     );
     target?.focus();
   }, [pending, result, focusToken, ids]);
-  async function doCopy() {
-    if (!result || copying || pending || result.blocked || !ids.length) return;
+  const [inspection, setInspection] = useState<{body:string; masked:string; findings:{rule:string;start:number;end:number;fingerprint:string}[]} | null>(null);
+  const activeFindings = inspection?.findings.filter((f) => !ignored.includes(`${scope}:${f.fingerprint}`)) || [];
+  useEffect(() => {
+    let active=true; setInspection(null);
+    if (!result) return;
+    const body=result.body;
+    const timer=setTimeout(() => { void request<{masked:string;findings:{rule:string;start:number;end:number;fingerprint:string}[]}>("check_text",{text:body}).then((r)=>{if(active)setInspection({...r,body});}).catch((e)=>{if(active){setInspection(null);setError(`検査を完了できませんでした。${message(e)}`);}}); },120);
+    return ()=>{active=false;clearTimeout(timer);};
+  },[result]);
+  async function doCopy(maskSensitive = true) {
+    if (!result || copying || pending || result.blocked || !ids.length || resolvedKey.current!==inputKey || inspection?.body!==result.body) return;
     setCopying(true);
     try {
-      const copied = await copy(result, project.id, values, standalone);
-      notice(`コピーしました（${copied.characters}文字）${copied.warning ? ` · ${copied.warning}` : ""}`);
+      const copied = await copy(result, project.id, values, standalone, maskSensitive, ignored.filter((v) => v.startsWith(`${scope}:`)).map((v) => v.slice(scope.length + 1)), includeContext, aiFormat);
+      notice(copySuccess(copied.characters, copied.warning));
       onCopied?.();
     } catch (e) {
-      notice(message(e));
+      notice(copyFailure(message(e)));
     } finally {
       setCopying(false);
     }
@@ -133,6 +153,7 @@ export function Composer({
         <h2 ref={heading}>依頼のプレビュー</h2>
         <span className="muted">{ids.length}本を合成</span>
       </div>
+      <details><summary>コピーの設定</summary><label><input type="checkbox" checked={includeContext} onChange={(e)=>{setIncludeContext(e.target.checked);localStorage.setItem(`context:${project.id}`,String(e.target.checked));}} />コピーに文脈ヘッダーを含める</label>{!standalone && <label><input type="checkbox" checked={aiFormat} onChange={(e)=>setAiFormat(e.target.checked)} />プロジェクトで選んだAI向けに整形する（既定：整形なし）</label>}</details>
       {!!result?.variables.length && (
         <div className="fields">
           {result.variables.map((v) => (
@@ -192,26 +213,29 @@ export function Composer({
           {error}
         </p>
       )}
-      {result?.diagnostics.map((d, i) => (
+      {result?.diagnostics.filter((d) => d.kind !== "unchecked").map((d, i) => (
         <p key={i} className={d.kind === "unchecked" ? "hint" : "error"}>
           {d.message}
         </p>
       ))}
       <pre aria-busy={pending}>
-        {result?.body || "レシピを選ぶと、ここに最終的な依頼が表示されます。"}
+        {pending ? "プレビューを更新しています…" : result && inspection?.body === result.body ? (() => { const bytes=new TextEncoder().encode(result.body); const decoder=new TextDecoder(); let cursor=0; const parts: React.ReactNode[]=[]; for(const f of activeFindings) { parts.push(decoder.decode(bytes.slice(cursor,f.start))); parts.push(<mark key={f.start} title={f.rule}>{decoder.decode(bytes.slice(f.start,f.end))}</mark>); cursor=f.end; } parts.push(decoder.decode(bytes.slice(cursor))); return parts; })() : result?.body || "プロンプトを選ぶと、ここに最終的な依頼が表示されます。"}
       </pre>
-      {result && <LintPanel text={result.body} />}
+      {result && <details><summary>詳細・Lint</summary><LintPanel text={result.body} /><p>自由文の意味検査は行いません。</p></details>}
+      {!!activeFindings.length && <p role="status">秘密情報・個人情報らしき文字列 {activeFindings.length}件。コピー前に確認してください。</p>}
+      {activeFindings.map((f) => <button className="text-button" key={f.fingerprint} onClick={() => { const next=[...ignored,`${scope}:${f.fingerprint}`]; localStorage.setItem("advisory-ignores",JSON.stringify(next.slice(-512))); setIgnored(next); }}>{f.rule}：このプロンプトでは無視</button>)}
       <div className="footer">
         <span className="muted">コピー時に本文・入力値を記録しません</span>
         <button
           className="primary"
           disabled={
-            !result || pending || copying || result.blocked || !ids.length
+            !result || pending || copying || result.blocked || !ids.length || inspection?.body !== result.body
           }
           onClick={() => void doCopy()}
         >
-          {copying ? "コピー中…" : "コピー"} <kbd>⌘↵</kbd>
+          {copying ? "コピー中…" : activeFindings.length ? "マスクしてコピー" : "コピー"} <kbd>{navigator.platform.includes("Mac") ? "⌘Enter" : "Ctrl+Enter"}</kbd>
         </button>
+        {!!activeFindings.length && <button disabled={pending || copying || !result || result.blocked} onClick={() => void doCopy(false)}>そのままコピー</button>}
       </div>
     </section>
   );

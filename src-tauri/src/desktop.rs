@@ -49,6 +49,14 @@ async fn dispatch(
 struct CopyRequest {
     #[serde(default)]
     standalone: bool,
+    #[serde(default)]
+    mask_sensitive: bool,
+    #[serde(default)]
+    include_context: bool,
+    #[serde(default)]
+    ai_format: bool,
+    #[serde(default)]
+    ignored: Vec<String>,
     project_id: String,
     revision_ids: Vec<String>,
     values: BTreeMap<String, String>,
@@ -64,7 +72,6 @@ async fn copy_prompt(
     authorized(&window)?;
     uuid::Uuid::parse_str(&request.operation_id)
         .map_err(|_| Error::new("operation", "コピー操作のIDが不正です。"))?;
-    let label = window.label().to_owned();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<State>();
         let _lock = state
@@ -73,16 +80,15 @@ async fn copy_prompt(
             .map_err(|_| Error::new("copy", "コピーを再試行してください。"))?;
         let ids = request.revision_ids.clone();
         let composed = state.store.call(move |conn| {
-            if request.standalone {
-                application::ledger_composition(conn, &request.revision_ids, &request.values)
-            } else {
-                application::composition(
-                    conn,
-                    &request.project_id,
-                    &request.revision_ids,
-                    &request.values,
-                )
-            }
+            application::output_composition(
+                conn,
+                &request.project_id,
+                &request.revision_ids,
+                &request.values,
+                request.standalone,
+                request.include_context,
+                request.ai_format,
+            )
         })?;
         if composed.blocked || composed.revision_ids.is_empty() {
             return Err(Error::new(
@@ -96,28 +102,30 @@ async fn copy_prompt(
                 "プレビューが変わりました。内容を確認して再試行してください。",
             ));
         }
-        app.clipboard().write_text(&composed.body).map_err(|_| {
+        let findings: Vec<_> = crate::advisory::inspect(&composed.body)
+            .into_iter()
+            .filter(|f| !request.ignored.contains(&f.fingerprint))
+            .collect();
+        let output = if request.mask_sensitive {
+            crate::advisory::mask(&composed.body, &findings)
+        } else {
+            composed.body.clone()
+        };
+        app.clipboard().write_text(&output).map_err(|_| {
             Error::new(
                 "clipboard",
                 "コピーできませんでした。入力は保持されています。",
             )
         })?;
         if let Ok(mut last) = state.last_output_hash.lock() {
-            *last = Some(format!("{:x}", Sha256::digest(composed.body.as_bytes())));
+            *last = Some(format!("{:x}", Sha256::digest(output.as_bytes())));
         }
         let warning = state
             .store
             .call(move |conn| application::record_use(conn, &request.operation_id, &ids))
             .err()
             .map(|_| "コピー済みですが利用記録を保存できませんでした。");
-        if label == "palette" {
-            if let Some(w) = app.get_webview_window("palette") {
-                w.hide().map_err(|_| {
-                    Error::new("window", "コピー済みですが小窓を閉じられませんでした。")
-                })?;
-            }
-        }
-        Ok(json!({"copied":true,"warning":warning,"characters":composed.body.chars().count()}))
+        Ok(json!({"copied":true,"warning":warning,"characters":output.chars().count()}))
     })
     .await
     .map_err(|_| Error::new("worker", "コピー処理が停止しました。"))?

@@ -25,6 +25,10 @@ export async function copy(
   project_id: string,
   values: Record<string, string>,
   standalone = false,
+  maskSensitive = false,
+  ignored: string[] = [],
+  includeContext = false,
+  aiFormat = false,
 ): Promise<{ warning: string | null; characters: number }> {
   if (desktop) {
     const result = await invoke<{ copied: boolean; warning: string | null; characters: number }>(
@@ -37,21 +41,33 @@ export async function copy(
           expected_hash: composition.hash,
           operation_id: crypto.randomUUID(),
           standalone,
+          mask_sensitive: maskSensitive,
+          ignored,
+          include_context: includeContext,
+          ai_format: aiFormat,
         },
       },
     );
+    sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
+    window.dispatchEvent(new Event("prompt-copied"));
     return { warning: result.warning, characters: result.characters };
   }
   const fresh = await request<Composition>("compose", {
     project_id,
     standalone,
+    include_context: includeContext,
+    ai_format: aiFormat,
     revision_ids: composition.revision_ids,
     values,
   });
   if (fresh.hash !== composition.hash || fresh.blocked)
     throw new Error("内容が変わりました。プレビューを確認してください。");
-  await navigator.clipboard.writeText(fresh.body);
-  return { warning: "開発用ブラウザでは利用履歴を記録しません。", characters: [...fresh.body].length };
+  const inspected = await request<{ masked: string }>("check_text", { text: fresh.body, ignored });
+  const output = maskSensitive ? inspected.masked : fresh.body;
+  await navigator.clipboard.writeText(output);
+  sessionStorage.setItem("recent-revisions",JSON.stringify(composition.revision_ids));
+    window.dispatchEvent(new Event("prompt-copied"));
+  return { warning: "開発用ブラウザでは利用履歴を記録しません。", characters: [...output].length };
 }
 export async function readMaterial(): Promise<{
   text: string;

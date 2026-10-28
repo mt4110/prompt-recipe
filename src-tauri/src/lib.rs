@@ -1,3 +1,4 @@
+pub mod advisory;
 pub mod ai;
 pub mod application;
 #[cfg(feature = "desktop")]

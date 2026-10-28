@@ -29,6 +29,11 @@ pub enum Request {
         archive: crate::portable::Archive,
         expected_plan: String,
     },
+    CheckText {
+        text: String,
+        #[serde(default)]
+        ignored: Vec<String>,
+    },
     Lint {
         text: String,
         format: String,
@@ -36,6 +41,10 @@ pub enum Request {
     Compose {
         #[serde(default)]
         standalone: bool,
+        #[serde(default)]
+        include_context: bool,
+        #[serde(default)]
+        ai_format: bool,
         project_id: String,
         revision_ids: Vec<String>,
         values: BTreeMap<String, String>,
@@ -101,7 +110,7 @@ impl Request {
     pub fn palette_allowed(&self) -> bool {
         matches!(
             self,
-            Self::Snapshot | Self::Lint { .. } | Self::Compose { .. }
+            Self::Snapshot | Self::CheckText { .. } | Self::Lint { .. } | Self::Compose { .. }
         )
     }
 }
@@ -154,7 +163,12 @@ pub fn composition(
         .iter()
         .map(|id| revision(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    compose_revisions(&recipes, &project(conn, project_id)?, values, ai_target(conn, project_id)?)
+    compose_revisions(
+        &recipes,
+        &project(conn, project_id)?,
+        values,
+        ai_target(conn, project_id)?,
+    )
 }
 
 pub fn ledger_composition(
@@ -198,6 +212,56 @@ fn compose_revisions(
         Some(target) => crate::ai::adapt(composed, &target),
         None => Ok(composed),
     }
+}
+pub fn output_composition(
+    conn: &Connection,
+    project_id: &str,
+    ids: &[String],
+    values: &BTreeMap<String, String>,
+    standalone: bool,
+    include_context: bool,
+    ai_format: bool,
+) -> Result<Composition> {
+    let mut result = if standalone {
+        ledger_composition(conn, ids, values)?
+    } else if ai_format {
+        composition(conn, project_id, ids, values)?
+    } else {
+        if ids.len() > 32 {
+            return Err(Error::new(
+                "input_limit",
+                "プロンプトは32件以内で選んでください。",
+            ));
+        }
+        let recipes = ids
+            .iter()
+            .map(|id| revision(conn, id))
+            .collect::<Result<Vec<_>>>()?;
+        compose_revisions(&recipes, &project(conn, project_id)?, values, None)?
+    };
+    if include_context {
+        let p = project(conn, project_id)?;
+        result.body = format!(
+            "【プロジェクト】{}\n【利用環境】{}\n\n{}",
+            p.name, p.environment, result.body
+        );
+        text_limit(&result.body)?;
+    }
+    result.hash = format!(
+        "{:x}",
+        Sha256::digest(
+            encode(&(
+                &result.body,
+                &result.revision_ids,
+                &result.diagnostics,
+                standalone,
+                include_context,
+                ai_format
+            ))?
+            .as_bytes()
+        )
+    );
+    Ok(result)
 }
 fn ai_target(conn: &Connection, project_id: &str) -> Result<Option<crate::ai::AiTarget>> {
     let data: Option<String> = conn
@@ -372,6 +436,15 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
 
 pub fn dispatch(conn: &mut Connection, request: Request) -> Result<Value> {
     match request {
+        Request::CheckText { text, ignored } => {
+            text_limit(&text)?;
+            if ignored.len()>512 { return Err(Error::new("input_limit","無視する検出は512件以内で指定してください。")); }
+            let findings: Vec<_> = crate::advisory::inspect(&text)
+                .into_iter()
+                .filter(|f| !ignored.contains(&f.fingerprint))
+                .collect();
+            Ok(json!({"masked":crate::advisory::mask(&text,&findings),"findings":findings}))
+        }
         Request::SaveSet {
             set,
             expected_version,
@@ -464,14 +537,20 @@ pub fn dispatch(conn: &mut Connection, request: Request) -> Result<Value> {
         }
         Request::Compose {
             standalone,
+            include_context,
+            ai_format,
             project_id,
             revision_ids,
             values,
-        } => Ok(json!(if standalone {
-            ledger_composition(conn, &revision_ids, &values)?
-        } else {
-            composition(conn, &project_id, &revision_ids, &values)?
-        })),
+        } => Ok(json!(output_composition(
+            conn,
+            &project_id,
+            &revision_ids,
+            &values,
+            standalone,
+            include_context,
+            ai_format
+        )?)),
         Request::SaveRecipe {
             recipe_id,
             expected_revision,
@@ -721,6 +800,35 @@ pub fn record_use(conn: &mut Connection, operation_id: &str, ids: &[String]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn advisory_does_not_mutate_database_and_body_defaults_are_consistent() {
+        let mut c = database();
+        let before = c.total_changes();
+        let response = dispatch(
+            &mut c,
+            Request::CheckText {
+                text: "API_SECRET=dummy-regression".into(),
+                ignored: vec![],
+            },
+        )
+        .expect("inspect");
+        assert_eq!(c.total_changes(), before);
+        assert!(!response.to_string().contains("dummy-regression"));
+        assert_eq!(response["masked"], "[MASKED]");
+        let ids = vec!["builtin-01-v1".into()];
+        let values = BTreeMap::from([("reference".into(), "dummy-reference".into())]);
+        let plain =
+            output_composition(&c, "personal", &ids, &values, true, false, false).expect("plain");
+        let again =
+            output_composition(&c, "personal", &ids, &values, true, false, false).expect("same");
+        assert_eq!(plain.body, again.body);
+        assert_eq!(plain.hash, again.hash);
+        assert!(!plain.body.contains("【プロジェクト】"));
+        let header =
+            output_composition(&c, "personal", &ids, &values, true, true, false).expect("context");
+        assert!(header.body.starts_with("【プロジェクト】"));
+        assert_ne!(plain.hash, header.hash);
+    }
     #[test]
     fn classified_seed_keeps_legacy_bytes_and_assignment() {
         let mut c = database();

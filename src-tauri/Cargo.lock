@@ -2599,6 +2599,7 @@ name = "prompt-recipe"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.42.0",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
