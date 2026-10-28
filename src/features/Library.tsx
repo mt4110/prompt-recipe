@@ -29,11 +29,8 @@ export function Library({
   refresh: () => Promise<void>;
   notice: (s: string) => void;
 }) {
-  const [ids, setIds] = useState<string[]>(
-    snapshot.recipes.find((r) => !r.builtin)
-      ? [snapshot.recipes.find((r) => !r.builtin)!.revision_id]
-      : [],
-  );
+  const [ids, setIds] = useState<string[]>([]);
+  const [previewSet, setPreviewSet] = useState(false);
   const [builtin, setBuiltin] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState(emptyFilter);
@@ -202,6 +199,7 @@ export function Library({
             apply={(v) => {
               setIds(v);
               setSelected(v[0] || "");
+              setPreviewSet(true);
               setValues({});
             }}
             refresh={refresh}
@@ -226,6 +224,7 @@ export function Library({
                         : ids.filter((id) => id !== r.revision_id),
                     );
                     if (!selected) setSelected(r.revision_id);
+                    setPreviewSet(false);
                   }}
                 />
                 <button
@@ -260,6 +259,7 @@ export function Library({
             <>
               <details><summary>使い方・実例・限界</summary><LessonView recipe={recipe} /></details>
 
+              <div className="panel" aria-label="プレビュー対象"><div className="actions"><button aria-pressed={!previewSet} onClick={()=>setPreviewSet(false)}>表示中の1本</button><button aria-pressed={previewSet} disabled={!ids.length} onClick={()=>setPreviewSet(true)}>チェックした{ids.length}本をプレビュー</button></div><p role="status">{previewSet ? `プレビュー対象：チェックした${ids.length}本のセット` : `プレビュー対象：${recipe.name} · v${recipe.version}`}</p></div>
               <Composer
                 standalone
                 project={{
@@ -270,7 +270,7 @@ export function Library({
                   assignment: [],
                   version: 1,
                 }}
-                ids={ids.length ? ids : [selected]}
+                ids={previewSet ? ids : [selected]}
                 values={values}
                 setValues={setValues}
                 notice={notice}
@@ -309,6 +309,7 @@ export function Library({
                       key={r.recipe.revision_id}
                       onClick={() => {
                         setSelected(r.recipe.revision_id);
+                        setPreviewSet(false);
                       }}
                     >
                       v{r.recipe.version} · {r.reason}
@@ -436,7 +437,7 @@ export function Library({
                   if(projects.length)setAdoption({recipe:r,projects});
                   await refresh();
                   setSelected(r.revision_id);
-                  setIds([r.revision_id]);
+                  setPreviewSet(false);
                   setBuiltin(false);
                   setValues({});
                   setEdit(null);

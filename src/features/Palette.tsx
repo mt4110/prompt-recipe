@@ -4,7 +4,8 @@ import type { Snapshot } from "../types";
 import { discover, emptyFilter } from "../discovery";
 import { RecipeFilters } from "./RecipeFilters";
 import { Composer } from "./Composer";
-let lastPalette: {ids:string[];values:Record<string,string>} = {ids:[],values:{}};
+type PaletteSession = { ids: string[]; values: Record<string, string> };
+const previousSessions = new Map<string, PaletteSession>();
 export function Palette({
   snapshot,
   notice,
@@ -25,16 +26,19 @@ export function Palette({
   const query = filter.query;
   const [selected, setSelected] = useState(0);
   const [ids, setIds] = useState<string[]>([]);
-  const [previousIds, setPreviousIds] = useState<string[]>(lastPalette.ids);
+  const [previousIds, setPreviousIds] = useState<string[]>(previousSessions.get(project.id)?.ids || []);
   const [closeAfterCopy, setCloseAfterCopy] = useState(() => localStorage.getItem("palette-close-after-copy") !== "false");
+  const sessionProject = useRef(project.id);
   const currentIds = useRef<string[]>([]);
-  const previousValues = useRef<Record<string,string>>(lastPalette.values);
+  const previousValues = useRef<Record<string,string>>(previousSessions.get(project.id)?.values || {});
   const currentValues = useRef<Record<string,string>>({});
   const [values, setValues] = useState<Record<string, string>>({});
   const input = useRef<HTMLInputElement>(null);
   const filtered = discover(snapshot.recipes, filter);
   const browsing = !!(query || filter.action || filter.goal);
-  if(ids.length)lastPalette={ids,values};
+  useEffect(() => {
+    if (sessionProject.current === project.id && ids.length) previousSessions.set(project.id, {ids, values});
+  }, [project.id, ids, values]);
   currentIds.current = ids;
   currentValues.current = values;
   useEffect(() => {
@@ -57,6 +61,10 @@ export function Palette({
   useEffect(() => {
     setIds([]);
     setValues({});
+    sessionProject.current=project.id;
+    const previous=previousSessions.get(project.id);
+    setPreviousIds(previous?.ids || []);
+    previousValues.current=previous?.values || {};
   }, [project.id, project.version]);
   return (
     <div
@@ -112,11 +120,10 @@ export function Palette({
           ? ` · ${aiProfile[snapshot.ai_target.surface]}`
           : ""}
       </p>
-      {!ids.length && previousIds.length > 0 && (
-        <button className="text-button" onClick={() => {setIds(previousIds);setValues(previousValues.current);}}>
-          前回の続き
-        </button>
-      )}
+      <div className="palette-resume">
+        <button className="text-button" disabled={!previousIds.length} onClick={() => {setIds(previousIds);setValues(previousValues.current);setFocusToken(v=>v+1);}}>前回の続き</button>
+        <span className="muted">{previousIds.length ? "このプロジェクトで前回使った小窓の内容に戻ります。" : "このプロジェクトで小窓を使うと、前回の内容に戻れます。"}アプリを閉じると消えます。</span>
+      </div>
       <input
         ref={input}
         type="search"
